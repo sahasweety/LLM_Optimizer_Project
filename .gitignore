@@ -1,0 +1,8 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+*.jpg
+*.png
+query_history.json
+test_model.py
