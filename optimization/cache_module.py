@@ -34,8 +34,8 @@ class CacheModule:
     def set(self, query: str, response: str):
         embedding = self._embed(query).tolist()
         key = self.cache_prefix + hashlib.md5(query.encode()).hexdigest()
-        self.redis.setex(key, 86400, json.dumps({
+        self.redis.set(key, json.dumps({
             'query': query,
             'response': response,
             'embedding': embedding
-        }))
+        }))   
