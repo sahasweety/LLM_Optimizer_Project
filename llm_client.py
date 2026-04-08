@@ -1,13 +1,27 @@
 import os
 import time
+import logging
 from groq import Groq
 from openai import OpenAI
 from dotenv import load_dotenv
-import google.generativeai as genai
 
 load_dotenv()
 
-genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
+logger = logging.getLogger(__name__)
+
+# Configure Google only if key is present
+_google_configured = False
+def _ensure_google():
+    global _google_configured
+    if not _google_configured:
+        api_key = os.getenv('GOOGLE_API_KEY')
+        if api_key:
+            import google.generativeai as genai
+            genai.configure(api_key=api_key)
+            _google_configured = True
+        else:
+            raise ValueError("GOOGLE_API_KEY not set in .env")
+
 
 class LLMClient:
     def __init__(self):
@@ -20,7 +34,7 @@ class LLMClient:
     def call(self, system: str, prompt: str, model_info: dict) -> dict:
         start = time.time()
         provider = model_info.get('provider', 'groq')
-        model = model_info.get('name', 'llama-3.1-8b-instant')
+        model    = model_info.get('name', 'llama-3.1-8b-instant')
 
         try:
             if provider == 'groq':
@@ -28,18 +42,20 @@ class LLMClient:
                     model=model,
                     messages=[
                         {"role": "system", "content": system},
-                        {"role": "user", "content": prompt}
+                        {"role": "user",   "content": prompt}
                     ],
                     max_tokens=512
                 )
-                text = res.choices[0].message.content
+                text   = res.choices[0].message.content
                 tokens = res.usage.total_tokens
 
             elif provider == 'google':
+                import google.generativeai as genai
+                _ensure_google()
                 gemini = genai.GenerativeModel(model)
                 full_prompt = f"{system}\n\n{prompt}"
-                res = gemini.generate_content(full_prompt)
-                text = res.text
+                res    = gemini.generate_content(full_prompt)
+                text   = res.text
                 tokens = len(full_prompt.split()) + len(text.split())
 
             elif provider == 'openrouter':
@@ -47,35 +63,35 @@ class LLMClient:
                     model=model,
                     messages=[
                         {"role": "system", "content": system},
-                        {"role": "user", "content": prompt}
+                        {"role": "user",   "content": prompt}
                     ],
                     max_tokens=512
                 )
-                text = res.choices[0].message.content
+                text   = res.choices[0].message.content
                 tokens = res.usage.total_tokens if res.usage else 100
 
             else:
                 raise ValueError(f"Unknown provider: {provider}")
 
         except Exception as e:
-            print(f"Provider {provider} failed: {e}, falling back to Groq")
+            logger.warning(f"Provider '{provider}' failed: {e}. Falling back to Groq.")
             res = self.groq.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[
                     {"role": "system", "content": system},
-                    {"role": "user", "content": prompt}
+                    {"role": "user",   "content": prompt}
                 ],
                 max_tokens=512
             )
-            text = res.choices[0].message.content
+            text   = res.choices[0].message.content
             tokens = res.usage.total_tokens
 
         latency = (time.time() - start) * 1000
-        cost = (tokens / 1000) * model_info.get('cost_per_1k', 0.0002)
+        cost    = (tokens / 1000) * model_info.get('cost_per_1k', 0.0002)
 
         return {
-            'response': text,
-            'tokens': tokens,
+            'response':   text,
+            'tokens':     tokens,
             'latency_ms': latency,
-            'cost_usd': cost
+            'cost_usd':   cost
         }

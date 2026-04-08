@@ -39,16 +39,43 @@ if 'selected_query' not in st.session_state:
     st.session_state.selected_query = None
 
 # ── SIDEBAR ────────────────────────────────────────────────
+def check_api_health() -> str:
+    for attempt in range(3):
+        try:
+            health = requests.get(f"{API_URL}/health", timeout=5)
+            if health.status_code == 200:
+                return "online"
+            return "error"
+        except requests.exceptions.ConnectionError:
+            if attempt < 2:
+                time.sleep(0.5)
+        except Exception:
+            if attempt < 2:
+                time.sleep(0.5)
+    return "offline"
+
+HEALTH_CHECK_INTERVAL = 10  # seconds
+
+now = time.time()
+last_checked = st.session_state.get("_health_checked_at", 0)
+if now - last_checked >= HEALTH_CHECK_INTERVAL:
+    st.session_state["_api_status"] = check_api_health()
+    st.session_state["_health_checked_at"] = now
+
+api_status = st.session_state.get("_api_status", "offline")
+
 with st.sidebar:
     st.header("⚙️ Platform Status")
-    try:
-        health = requests.get(f"{API_URL}/health", timeout=3)
-        if health.status_code == 200:
-            st.success("✅ API Server Online")
-        else:
-            st.error("❌ API Server Error")
-    except:
-        st.error("❌ API Server Offline")
+    if api_status == "online":
+        st.success("✅ API Server Online")
+    elif api_status == "error":
+        st.warning("⚠️ API Server Error (unexpected status)")
+    else:
+        st.error("❌ API Server Offline — run: uvicorn api.rest_api:app --host 127.0.0.1 --port 8081")
+
+    if st.button("🔄 Refresh Status", use_container_width=True):
+        st.session_state["_health_checked_at"] = 0
+        st.rerun()
 
     st.markdown("---")
     st.header("📊 Session Stats")

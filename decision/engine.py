@@ -2,16 +2,38 @@ import random
 from sqlalchemy import create_engine, text
 import os
 from dotenv import load_dotenv
+import logging
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 class DecisionEngine:
     STRATEGIES = ['cache', 'prompt+model', 'baseline']
     EPSILON = 0.1
 
     def __init__(self):
-        self.db = create_engine(os.getenv('DATABASE_URL'))
+        self._db = None
         self.weights = {s: 1.0 for s in self.STRATEGIES}
+
+    def _get_db(self):
+        """Lazy DB engine – returns None if DATABASE_URL is missing or unreachable."""
+        if self._db is None:
+            db_url = os.getenv('DATABASE_URL')
+            if not db_url:
+                logger.warning("DATABASE_URL not set – DecisionEngine running without DB.")
+                return None
+            try:
+                self._db = create_engine(db_url, pool_pre_ping=True)
+                # Quick connectivity check
+                with self._db.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                logger.info("DecisionEngine DB connected successfully.")
+            except Exception as e:
+                logger.warning(f"DecisionEngine DB connection failed: {e}")
+                self._db = None
+                return None
+        return self._db
 
     def _pareto_score(self, row) -> float:
         latency_norm = min(row['avg_latency_ms'] / 3000, 1.0)
@@ -20,8 +42,11 @@ class DecisionEngine:
         return (latency_norm * 0.4) + (cost_norm * 0.3) + (halluc_norm * 0.3)
 
     def update_weights(self):
+        db = self._get_db()
+        if db is None:
+            return
         try:
-            with self.db.connect() as conn:
+            with db.connect() as conn:
                 rows = conn.execute(text('''
                     SELECT strategy,
                            AVG(avg_latency_ms)    AS avg_latency_ms,
@@ -36,7 +61,7 @@ class DecisionEngine:
                 score = self._pareto_score(dict(row._mapping))
                 self.weights[row.strategy] = 1.0 - score
         except Exception as e:
-            print(f'DB not ready yet: {e}')
+            logger.warning(f'DB query failed: {e}')
 
     def select_strategy(self) -> str:
         if random.random() < self.EPSILON:

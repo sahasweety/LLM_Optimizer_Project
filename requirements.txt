@@ -1,14 +1,29 @@
+# ── Core API ──────────────────────────────────────────────────────────────────
 fastapi==0.110.0
 uvicorn==0.27.0
-openai==1.12.0
-anthropic==0.19.0
-kafka-python==2.0.2
+pydantic==2.5.3
+python-dotenv==1.0.0
+
+# ── LLM Providers ─────────────────────────────────────────────────────────────
+openai>=1.12.0
+groq>=0.4.0
+google-generativeai>=0.4.0
+anthropic>=0.19.0
+
+# ── Messaging / Streaming ──────────────────────────────────────────────────────
+kafka-python-ng==2.2.3
+
+# ── Storage ───────────────────────────────────────────────────────────────────
 redis==5.0.1
 sqlalchemy==2.0.25
 psycopg2-binary==2.9.9
+
+# ── ML / Embeddings ───────────────────────────────────────────────────────────
 sentence-transformers==2.3.1
 numpy==1.26.3
-grpcio==1.62.0
-grpcio-tools==1.62.0
-python-dotenv==1.0.0
-pydantic==2.5.3
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+streamlit>=1.30.0
+plotly>=5.18.0
+pandas>=2.0.0
+requests>=2.31.0

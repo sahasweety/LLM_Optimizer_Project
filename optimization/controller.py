@@ -5,7 +5,7 @@ import time
 
 class OptimizationController:
     def __init__(self):
-        self.cache = CacheModule(threshold=0.80)
+        self.cache = CacheModule(threshold=0.65)
         self.prompt = PromptModule()
         self.selector = ModelSelector()
 
