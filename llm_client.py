@@ -44,7 +44,8 @@ class LLMClient:
                         {"role": "system", "content": system},
                         {"role": "user",   "content": prompt}
                     ],
-                    max_tokens=512
+                    max_tokens=512,
+                    timeout=20.0
                 )
                 text   = res.choices[0].message.content
                 tokens = res.usage.total_tokens
@@ -54,7 +55,7 @@ class LLMClient:
                 _ensure_google()
                 gemini = genai.GenerativeModel(model)
                 full_prompt = f"{system}\n\n{prompt}"
-                res    = gemini.generate_content(full_prompt)
+                res    = gemini.generate_content(full_prompt, request_options={"timeout": 20.0})
                 text   = res.text
                 tokens = len(full_prompt.split()) + len(text.split())
 
@@ -65,7 +66,8 @@ class LLMClient:
                         {"role": "system", "content": system},
                         {"role": "user",   "content": prompt}
                     ],
-                    max_tokens=512
+                    max_tokens=512,
+                    timeout=20.0
                 )
                 text   = res.choices[0].message.content
                 tokens = res.usage.total_tokens if res.usage else 100
@@ -81,7 +83,8 @@ class LLMClient:
                     {"role": "system", "content": system},
                     {"role": "user",   "content": prompt}
                 ],
-                max_tokens=512
+                max_tokens=512,
+                timeout=20.0
             )
             text   = res.choices[0].message.content
             tokens = res.usage.total_tokens

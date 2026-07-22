@@ -66,19 +66,32 @@ class HallucinationDetector:
 
         return min(confidence + speculative, 0.8)
 
-    def _do_consistency_check(self, query: str, model_info: dict) -> float:
+    def _do_single_call(self, query: str, model_info: dict) -> str:
+        r = self.client.call('Answer factually.', query, model_info)
+        return r['response']
+
+    def _consistency_score(self, query: str, model_info: dict) -> float:
         """
-        Makes 2 extra LLM calls (reduced from 3) and computes semantic
-        consistency between them.  Runs inside a thread-pool future so
-        it never blocks the HTTP response path beyond CONSISTENCY_TIMEOUT.
+        Runs two consistency checks in parallel background threads with a hard
+        timeout so the caller never waits more than CONSISTENCY_TIMEOUT seconds.
         """
+        f1 = _executor.submit(self._do_single_call, query, model_info)
+        f2 = _executor.submit(self._do_single_call, query, model_info)
+        
         responses = []
-        for _ in range(2):          # reduced from 3 → 2 calls
-            try:
-                r = self.client.call('Answer factually.', query, model_info)
-                responses.append(r['response'])
-            except Exception as e:
-                logger.warning(f"Consistency check call failed: {e}")
+        try:
+            r1 = f1.result(timeout=CONSISTENCY_TIMEOUT)
+            responses.append(r1)
+        except Exception as e:
+            logger.warning(f"Consistency check call 1 failed or timed out: {e}")
+            f1.cancel()
+            
+        try:
+            r2 = f2.result(timeout=CONSISTENCY_TIMEOUT)
+            responses.append(r2)
+        except Exception as e:
+            logger.warning(f"Consistency check call 2 failed or timed out: {e}")
+            f2.cancel()
 
         if len(responses) < 2:
             return 0.3              # neutral fallback
@@ -89,23 +102,6 @@ class HallucinationDetector:
 
         inconsistency = float(1.0 - sim)
         return min(inconsistency * 1.5, 1.0)
-
-    def _consistency_score(self, query: str, model_info: dict) -> float:
-        """
-        Runs the consistency check in a background thread with a hard
-        timeout so the caller never waits more than CONSISTENCY_TIMEOUT
-        seconds.  Returns 0.3 (neutral) on timeout or error.
-        """
-        future = _executor.submit(self._do_consistency_check, query, model_info)
-        try:
-            return future.result(timeout=CONSISTENCY_TIMEOUT)
-        except concurrent.futures.TimeoutError:
-            future.cancel()
-            logger.warning("Consistency check timed out — using neutral score 0.3")
-            return 0.3
-        except Exception as e:
-            logger.warning(f"Consistency check error: {e} — using neutral score 0.3")
-            return 0.3
 
     REFUSAL_PHRASES = [
         "cannot answer", "don't have access", "do not have access", 
