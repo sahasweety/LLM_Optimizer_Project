@@ -9,7 +9,7 @@ class OptimizationController:
         self.prompt = PromptModule()
         self.selector = ModelSelector()
 
-    def process(self, query: str) -> dict:
+    def process(self, query: str, engine=None) -> dict:
         start = time.time()
 
         # Step 1: Check cache first
@@ -23,22 +23,31 @@ class OptimizationController:
                 'similarity': cached['similarity']
             }
 
-        # Step 2: Select model based on complexity
+        # Step 2: Select model based on complexity and intent
         model_info = self.selector.select(query)
         complexity = model_info['complexity']
 
-        # Step 3: Decide strategy based on complexity
-        # Simple query (complexity < 0.3) → just use fast model, no prompt optimization
-        # Complex query (complexity >= 0.3) → use prompt optimization + model selection
-        if complexity < 0.3:
-            strategy = 'model_selection'
-            prompt = query
-            system = 'You are a helpful assistant. Answer clearly and concisely.'
+        # Step 3: Decide strategy based on DecisionEngine (if provided) or fallback complexity
+        if engine is not None:
+            rec_strategy = engine.select_strategy()
+            if rec_strategy == 'baseline':
+                strategy = 'model_selection'
+            elif rec_strategy == 'cache':
+                # If DecisionEngine recommends cache but we had a cache miss, we fall back to model selection
+                strategy = 'model_selection'
+            else:
+                strategy = rec_strategy
         else:
-            strategy = 'prompt+model'
+            strategy = 'model_selection' if complexity < 0.3 else 'prompt+model'
+
+        # Step 4: Apply prompt optimization if strategy calls for it
+        if strategy == 'prompt+model':
             optimized = self.prompt.optimize(query)
             prompt = optimized['prompt']
             system = optimized['system']
+        else:
+            prompt = query
+            system = 'You are a helpful assistant. Answer clearly and concisely.'
 
         return {
             'system': system,

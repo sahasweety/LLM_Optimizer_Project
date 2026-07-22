@@ -55,10 +55,22 @@ async def process_query(req: QueryRequest):
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
 
     try:
-        opt = controller.process(req.query)
+        opt = controller.process(req.query, engine)
 
         # ── Cache hit path ────────────────────────────────────────────────────
         if opt.get('cache_hit'):
+            try:
+                engine.log_query(
+                    strategy='cache',
+                    latency_ms=opt['latency_ms'],
+                    tokens=0,
+                    cost_usd=0.0,
+                    hallucination_score=0.0,
+                    cache_hit=True
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log cache hit to engine: {e}")
+
             return QueryResponse(
                 response=opt['response'],
                 strategy='cache',
@@ -96,6 +108,19 @@ async def process_query(req: QueryRequest):
             )
         except Exception as e:
             logger.warning(f"Kafka emit failed (non-fatal): {e}")
+
+        # Log query metrics to DecisionEngine
+        try:
+            engine.log_query(
+                strategy=opt['strategy'],
+                latency_ms=llm_result['latency_ms'],
+                tokens=llm_result['tokens'],
+                cost_usd=llm_result['cost_usd'],
+                hallucination_score=halluc['hallucination_score'],
+                cache_hit=False
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log query to engine: {e}")
 
         return QueryResponse(
             response=llm_result['response'],

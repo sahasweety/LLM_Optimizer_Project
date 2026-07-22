@@ -1,3 +1,5 @@
+from .prompt_module import PromptModule
+
 class ModelSelector:
     MODELS = {
         'fast': {
@@ -30,39 +32,6 @@ class ModelSelector:
         }
     }
 
-    def _detect_query_type(self, query: str) -> str:
-        q = query.lower()
-        
-        # Coding detection
-        coding_keywords = [
-            'code', 'function', 'class', 'write a program', 'script', 'python', 
-            'javascript', 'java', 'html', 'css', 'sql', 'bug', 'debug', 'exception', 
-            'compile', 'runtime', 'api endpoint', 'json', 'yaml', 'regex'
-        ]
-        if any(w in q for w in coding_keywords):
-            return 'coding'
-            
-        # Reasoning detection
-        reasoning_keywords = [
-            'math', 'calculate', 'riddle', 'puzzle', 'solve for', 'equation', 
-            'logic', 'reason', 'proof', 'step-by-step', 'algorithm', 'complexity', 
-            'optimization', 'derive', 'differentiate'
-        ]
-        if any(w in q for w in reasoning_keywords):
-            return 'reasoning'
-            
-        # Creative detection
-        creative_keywords = [
-            'poem', 'story', 'creative', 'brainstorm', 'ideas', 'essay', 'compose', 
-            'write a letter', 'email template', 'congratulate', 'fictional', 
-            'roleplay', 'draft'
-        ]
-        if any(w in q for w in creative_keywords):
-            return 'creative'
-            
-        # Default/Factual
-        return 'factual'
-
     def _complexity_score(self, query: str) -> float:
         score = 0.0
         words = query.lower().split()
@@ -80,30 +49,23 @@ class ModelSelector:
 
     def select(self, query: str) -> dict:
         score = self._complexity_score(query)
-        q_type = self._detect_query_type(query)
         
-        # Intent-driven routing matrix
-        if q_type == 'coding':
-            # Coding requires high logical coding capability: route to powerful or expert
+        # Centralized type classification via PromptModule
+        prompt_mod = PromptModule()
+        q_type = prompt_mod.detect_task_type(query)
+        
+        # Comprehensive intent-driven routing matrix
+        if q_type in ('coding', 'math', 'reasoning', 'sensitive_info'):
+            # Demands advanced logical syntax or privacy guards: powerful/expert
             tier = 'expert' if score >= 0.3 else 'powerful'
-        elif q_type == 'reasoning':
-            # Reasoning requires step-by-step logic: route to expert or powerful/balanced
-            if score >= 0.4:
-                tier = 'expert'
-            elif score >= 0.2:
-                tier = 'powerful'
-            else:
-                tier = 'balanced'
-        elif q_type == 'creative':
-            # Creative needs flexibility and context: balanced or fast
+        elif q_type in ('summarization', 'translation', 'analysis'):
+            # Needs structured text translation/summaries: balanced/powerful
+            tier = 'powerful' if score >= 0.4 else 'balanced'
+        elif q_type in ('creative', 'current_events'):
+            # Dynamic creative writing or temporal updates: balanced/fast
             tier = 'balanced' if score >= 0.3 else 'fast'
-        else: # factual
-            # Factual is simple info retrieval: fast or balanced or powerful (if very complex analysis needed)
-            if score >= 0.5:
-                tier = 'powerful'
-            elif score >= 0.2:
-                tier = 'balanced'
-            else:
-                tier = 'fast'
+        else: # general_chat, factual QA
+            # Fast response / simple chat: fast/balanced
+            tier = 'balanced' if score >= 0.4 else 'fast'
                 
         return {'tier': tier, 'complexity': score, 'query_type': q_type, **self.MODELS[tier]}
