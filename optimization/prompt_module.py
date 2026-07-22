@@ -60,6 +60,17 @@ class PromptModule:
     def detect_task_type(self, query: str) -> str:
         q = query.lower()
         
+        # High-Reasoning (System Design, Distributed Systems, Backend Architecture)
+        reasoning_keywords = [
+            'riddle', 'puzzle', 'logic', 'reason', 'proof', 'step-by-step', 'deduce', 'contradiction',
+            'distributed system', 'backend architecture', 'system design', 'scalability', 'database', 
+            'caching', 'load balancing', 'fault tolerance', 'microservices', 'cloud architecture', 'api design',
+            'load balancer', 'failover', 'sharding', 'replication', 'message queue', 'nosql', 'relational db',
+            'consistent hashing', 'rate limiting', 'circuit breaker'
+        ]
+        if any(w in q for w in reasoning_keywords):
+            return 'reasoning'
+
         # Coding
         coding_keywords = ['code', 'function', 'class', 'write a program', 'script', 'python', 'javascript', 'java', 'html', 'css', 'sql', 'bug', 'debug', 'exception']
         if any(w in q for w in coding_keywords):
@@ -69,11 +80,6 @@ class PromptModule:
         math_keywords = ['math', 'calculate', 'solve for', 'equation', 'plus', 'minus', 'multiply', 'divide', 'derivative', 'integral', 'fraction', 'algebra', 'geometry']
         if any(w in q for w in math_keywords):
             return 'math'
-            
-        # Reasoning
-        reasoning_keywords = ['riddle', 'puzzle', 'logic', 'reason', 'proof', 'step-by-step', 'deduce', 'contradiction']
-        if any(w in q for w in reasoning_keywords):
-            return 'reasoning'
             
         # Translation
         translation_keywords = ['translate', 'translation', 'in spanish', 'in french', 'in german', 'in chinese', 'in japanese', 'how to say']

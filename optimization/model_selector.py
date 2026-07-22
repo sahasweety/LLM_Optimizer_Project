@@ -55,7 +55,10 @@ class ModelSelector:
         q_type = prompt_mod.detect_task_type(query)
         
         # Comprehensive intent-driven routing matrix
-        if q_type in ('coding', 'math', 'reasoning', 'sensitive_info'):
+        if q_type == 'reasoning':
+            # Always route high-reasoning tasks (system design, backend architecture, logic) to the expert tier
+            tier = 'expert'
+        elif q_type in ('coding', 'math', 'sensitive_info'):
             # Demands advanced logical syntax or privacy guards: powerful/expert
             tier = 'expert' if score >= 0.3 else 'powerful'
         elif q_type in ('summarization', 'translation', 'analysis'):
