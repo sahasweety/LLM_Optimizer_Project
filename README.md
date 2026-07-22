@@ -30,7 +30,7 @@ Most LLM applications are slow, expensive, and unreliable. This platform solves 
 User Query
     ↓
 Optimization Controller
-    ├── Cache Module (Redis · similarity ≥ 0.80 → instant return)
+    ├── Cache Module (Redis · similarity ≥ 0.75 → instant return)
     ├── Model Selector (complexity score → fast/balanced/powerful/expert)
     └── Prompt Module (task detection → QA/code/analysis/summary)
     ↓
@@ -113,6 +113,14 @@ DATABASE_URL=postgresql://admin:secret@localhost:5433/llmplatform
 ```
 
 ### Run
+
+#### Windows (One-Click Start)
+Simply run the included batch script to clean up orphaned ports and launch all services:
+```powershell
+.\start.bat
+```
+
+#### Manual Start (Cross-Platform)
 ```bash
 # Start Docker services
 docker-compose up -d
