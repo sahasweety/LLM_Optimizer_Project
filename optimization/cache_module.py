@@ -2,7 +2,6 @@ import redis
 import json
 import hashlib
 import numpy as np
-from sentence_transformers import SentenceTransformer
 import logging
 import re
 
@@ -40,10 +39,12 @@ def normalize_query(text: str) -> str:
     return text
 
 
+from hallucination.detector import get_embedder
+
 class CacheModule:
     def __init__(self, threshold=0.75):
         self._redis = None
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.model = get_embedder()
         self.threshold = threshold          # set to 0.75 for a balanced trade-off
         self.cache_prefix = 'llm_cache:'
 
