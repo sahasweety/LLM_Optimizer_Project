@@ -18,7 +18,7 @@ def get_embedder():
     global _shared_embedder
     if _shared_embedder is None:
         logger.info("Loading SentenceTransformer model (first use)...")
-        _shared_embedder = SentenceTransformer('all-MiniLM-L6-v2')
+        _shared_embedder = SentenceTransformer('all-MiniLM-L6-v2', local_files_only=True)
     return _shared_embedder
 
 
