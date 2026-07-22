@@ -8,20 +8,42 @@ A production-grade backend platform that intelligently optimizes Large Language 
 
 Most LLM applications are slow, expensive, and unreliable. This platform solves all three problems:
 
-- **Slow** → Redis semantic cache returns repeated queries in ~50ms instead of 2000ms
-- **Expensive** → Smart model routing uses cheap models for simple queries, powerful models only when needed
-- **Unreliable** → Every response is scored for hallucination risk before being returned
+- **Slow** → Redis semantic cache returns repeated queries in ~50ms instead of 2000ms.
+- **Expensive** → Smart model routing uses cheap models for simple queries, powerful models only when needed.
+- **Unreliable** → Every response is scored for hallucination risk before being returned.
 
 ---
 
 ## ✨ Features
 
-- **3 Optimization Strategies** — Cache, Model Selection, Prompt+Model
-- **4 LLM Providers** — Groq (llama), Google Gemini, Anthropic Claude, OpenAI GPT-4o-mini
-- **Hallucination Detection** — Self-consistency checks + confidence scoring → 0.0–1.0 risk score
-- **Real-time Observability** — Kafka event streaming → Stream Processor → PostgreSQL
-- **Decision Engine** — Pareto optimization + epsilon-greedy RL auto-selects best strategy
-- **Streamlit Dashboard** — Live charts, query history, hallucination gauge
+- **3 Optimization Strategies** — Cache, Model Selection, Prompt+Model.
+- **4 LLM Providers** — Groq (llama), Google Gemini, Anthropic Claude, OpenAI GPT-4o-mini.
+- **Hallucination Detection** — Self-consistency checks + confidence scoring → 0.0–1.0 risk score.
+- **Real-time Observability** — Kafka event streaming → Stream Processor → PostgreSQL.
+- **Decision Engine** — Pareto optimization + epsilon-greedy RL auto-selects best strategy.
+- **Streamlit Dashboard** — Live charts, query history, hallucination gauge.
+
+---
+
+## 🚀 Performance & Production-Readiness Enhancements
+
+The platform has been optimized to handle high concurrency with enterprise-grade latency standards:
+
+1. **FastAPI Background Tasks:** All telemetry writes (PostgreSQL events, Kafka streaming, Cache inserts, and Decision Engine log updates) execute asynchronously in background threads, returning response JSONs to users instantly.
+2. **Selective Consistency Verification:** Heuristic confidence analysis bypasses expensive background consistency checking for factual/low-risk questions, saving up to 2 external API calls per request.
+3. **Background Redis Connection Daemon:** Checks Redis server status in a background daemon thread every 60 seconds. This avoids blocking the request pipeline with TCP timeouts when Redis is offline.
+4. **Single-Embedding Reusability:** The query vector is computed exactly once at the beginning of the pipeline and reused across the cache check and fallback cache updates.
+5. **Multi-Thread Concurrency Locks:** Re-entrant locks serialize background database connections, Kafka producer initializations, in-memory caches, and Decision Engine histories to prevent race conditions during high concurrent traffic.
+
+---
+
+## 🧠 Advanced Intent Classification & Routing
+
+The intent classification has been upgraded to distinguish complex tasks from simple educational or basic coding tasks:
+
+- **General System Design Patterns:** Automatically classifies structural query patterns (e.g. `\bdesign\s+a\b`, `\bhow\s+would\s+you\s+design\b`, `\barchitecture\s+for\b`, `\bbuild\s+a\s+scalable\b`) and routes them directly to the `expert` reasoning model (`openai/gpt-4o-mini`).
+- **CS Conceptual Co-occurrence Rules:** Algorithmic, networking, database, and OS conceptual topics (e.g. `dynamic programming`, `tcp/ip`, `dijkstra`) are classified as high-reasoning tasks *only* when they occur alongside educational command patterns (e.g., `Explain`, `Compare`, `Time complexity`, `With an example`).
+- **Low-Cost Routing:** Simple factual questions, chat queries, and basic coding tasks are automatically routed to fast, cost-efficient models (e.g., `llama-3.1-8b-instant`, `gemini-2.5-flash-lite`, or `claude-3-haiku`).
 
 ---
 
@@ -32,7 +54,7 @@ User Query
 Optimization Controller
     ├── Cache Module (Redis · similarity ≥ 0.75 → instant return)
     ├── Model Selector (complexity score → fast/balanced/powerful/expert)
-    └── Prompt Module (task detection → QA/code/analysis/summary)
+    └── Prompt Module (task detection → QA/code/analysis/summary/reasoning)
     ↓
 Groq / Google Gemini / Claude / GPT-4o-mini
     ↓
@@ -76,7 +98,7 @@ Streamlit Dashboard
 | Cache | Redis |
 | Event Streaming | Apache Kafka |
 | Database | PostgreSQL |
-| ML Embeddings | sentence-transformers |
+| ML Embeddings | sentence-transformers (local check only) |
 | Infrastructure | Docker, Docker Compose |
 
 ---
