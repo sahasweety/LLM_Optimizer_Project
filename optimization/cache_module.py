@@ -41,10 +41,10 @@ def normalize_query(text: str) -> str:
 
 
 class CacheModule:
-    def __init__(self, threshold=0.65):
+    def __init__(self, threshold=0.75):
         self._redis = None
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
-        self.threshold = threshold          # lowered from 0.80 → 0.65
+        self.threshold = threshold          # set to 0.75 for a balanced trade-off
         self.cache_prefix = 'llm_cache:'
 
     def _get_redis(self):
