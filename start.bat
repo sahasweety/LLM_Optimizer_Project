@@ -7,6 +7,11 @@ echo   LLM Optimization Platform Starting...
 echo ========================================
 echo.
 
+echo Cleaning up any existing processes on ports 8081 (API) and 8501 (Dashboard)...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8081 ^| findstr LISTENING') do taskkill /f /pid %%a 2>nul
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8501 ^| findstr LISTENING') do taskkill /f /pid %%a 2>nul
+echo.
+
 echo [1/4] Starting Docker services (optional)...
 docker-compose up -d 2>nul
 if %ERRORLEVEL% NEQ 0 (
@@ -20,7 +25,7 @@ if %ERRORLEVEL% NEQ 0 (
 echo.
 
 echo [2/4] Starting API Server...
-start "API Server" cmd /k "cd /d %~dp0 && .venv\Scripts\activate && python -m uvicorn api.rest_api:app --host 127.0.0.1 --port 8081 --reload"
+start "API Server" cmd /k "cd /d "%~dp0" && .venv\Scripts\python.exe -m uvicorn api.rest_api:app --host 127.0.0.1 --port 8081 --reload"
 echo Waiting for API server to be ready...
 
 :: Poll /health every 2 seconds until it responds OK (max 60 seconds / 30 attempts)
@@ -39,13 +44,13 @@ echo [WARNING] API Server did not respond in 60s - check the "API Server" window
 echo.
 
 echo [3/4] Starting Stream Processor...
-start "Stream Processor" cmd /k "cd /d %~dp0 && .venv\Scripts\activate && python run_processor.py"
+start "Stream Processor" cmd /k "cd /d "%~dp0" && .venv\Scripts\python.exe run_processor.py"
 timeout /t 3 /nobreak > nul
 echo Stream Processor started!
 echo.
 
 echo [4/4] Starting Streamlit Dashboard...
-start "Streamlit Dashboard" cmd /k "cd /d %~dp0 && .venv\Scripts\activate && python -m streamlit run dashboard.py --server.headless true"
+start "Streamlit Dashboard" cmd /k "cd /d "%~dp0" && .venv\Scripts\python.exe -m streamlit run dashboard.py --server.headless true"
 echo Waiting for Streamlit to be ready...
 timeout /t 10 /nobreak > nul
 echo Streamlit started!
