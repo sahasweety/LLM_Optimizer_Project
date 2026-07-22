@@ -90,10 +90,37 @@ class PromptModule:
         riddle_patterns = [
             'riddle', 'puzzle', 'logic', 'reason', 'proof', 'step-by-step', 'deduce', 'contradiction'
         ]
+
+        # Conceptual Computer Science Reasoning Patterns (Require matching with CS vocab)
+        cs_reasoning_patterns = [
+            r'\bexplain\s+',
+            r'\bhow\s+does\s+.*\s+work\b',
+            r'\bwith\s+an\s+example\b',
+            r'\btime\s+complexity\b',
+            r'\bspace\s+complexity\b',
+            r'\bwhy\s+is\s+',
+            r'\bcompare\s+'
+        ]
+
+        # Conceptual Computer Science Terms
+        cs_terminology = [
+            'algorithm', 'data structure', 'complexity analysis', 'graph algorithm', 
+            'dynamic programming', 'sorting algorithm', 'dijkstra', 'binary search', 
+            'hash table', 'recursion', 'operating system', 'concurrency', 'deadlock', 
+            'process scheduling', 'virtual memory', 'multi-threading', 'multithreading',
+            'networking', 'tcp/ip', 'dns lookup', 'udp', 'http protocol', 'three-way handshake',
+            'relational database', 'nosql database', 'acid properties', 'database indexing',
+            'b-tree', 'trie', 'greedy algorithm', 'divide and conquer'
+        ]
+        
+        # Check co-occurrence for educational CS conceptual queries
+        has_edu_pattern = any(re.search(pat, q) for pat in cs_reasoning_patterns)
+        cs_vocab = engineering_terms + cs_terminology
+        has_cs_vocab = any(term in q for term in cs_vocab)
         
         if any(re.search(pat, q) for pat in system_design_patterns) or \
-           any(term in q for term in engineering_terms) or \
-           any(r in q for r in riddle_patterns):
+           any(r in q for r in riddle_patterns) or \
+           (has_edu_pattern and has_cs_vocab):
             return 'reasoning'
 
         # Coding

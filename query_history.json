@@ -545,5 +545,18 @@
     "cache_hit": false,
     "explanation": "Medium Risk: Minor inconsistency or mild speculation detected. Please cross-reference critical facts. Details: Minor differences in detail detected between multiple model runs. Contains mild hedging language (e.g., 'probably', 'likely').",
     "query": "Design a scalable URL shortening service like Bitly."
+  },
+  {
+    "response": "**Dijkstra's Algorithm**\n\nDijkstra's algorithm is a popular graph search algorithm used to find the shortest path between two nodes in a weighted graph or network. It was first proposed by Dutch computer scientist Edsger Dijkstra in 1959.\n\n**How Dijkstra's Algorithm Works**\n\n1. **Initialization**: The algorithm starts by:\n\t* Assigning a distance of 0 to the starting node (also called the 'source node') and a infinite distance to all other nodes.\n\t* Adding the starting node to the 'priority queue' (a data structure that helps prioritize nodes based on their distance from the source node).\n2. **Shortest Path Tree**: While the priority queue is not empty:\n\t* Extract the node with the minimum distance from the priority queue (let's call this node 'u').\n\t* For each neighbor of node 'u' (let's call this neighbor 'v'):\n\t\t+ Calculate the distance to node 'v' by adding the weight of the edge from 'u' to 'v' to the distance of 'u'.\n\t\t+ If the calculated distance is less than the current distance of 'v', update the distance of 'v' and add an edge to the shortest path tree.\n3. **Shortest Path**: Once the priority queue is empty, the shortest path from the starting node to all other nodes can be obtained by tracing back from each node to the starting node using the shortest path tree.\n\n**Example**\n\nSuppose we have a graph with 4 nodes (A, B, C, D) and weights between them as follows:\n\n| From | To | Weight |\n| --- | --- | --- |\n| A   | B | 4    |\n| A   | C | 2    |\n| B   | D | 1    |\n| C   | D | 5    |\n\nWe want to find the shortest path from node A to node D.\n\n**Initialization**\n\nDistance from A to each node:\n- A: 0\n- B: \u221e\n- C: \u221e\n- D: \u221e\n\nPriority queue (node with minimum distance first):\n- A (0)\n\n**Shortest Path Tree**\n\n1. Extract node A from the priority queue (distance: 0).\n2. For each neighbor of A (B and C):\n\t* B: 0 + 4 = 4\n\t* C: 0 + 2 = 2\n3. Update distances and add nodes to the priority queue:\n\t",
+    "strategy": "model_selection",
+    "model": "llama-3.1-8b-instant",
+    "latency_ms": 977.259635925293,
+    "tokens": 570,
+    "cost_usd": 5.6999999999999996e-05,
+    "hallucination_score": 0.0,
+    "risk_level": "low",
+    "cache_hit": false,
+    "explanation": "Low Risk: Response is semantically consistent and contains no speculative or uncertain language. Details: Response verified instantly via lightweight heuristics (no speculation or logical risk found).",
+    "query": "Explain Dijkstra's algorithm with an example."
   }
 ]
