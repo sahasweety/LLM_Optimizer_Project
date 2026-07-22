@@ -519,5 +519,31 @@
     "cache_hit": false,
     "explanation": "Medium Risk: Minor inconsistency or mild speculation detected. Please cross-reference critical facts. Details: Minor differences in detail detected between multiple model runs. Contains mild hedging language (e.g., 'probably', 'likely').",
     "query": "Design a scalable ride-sharing backend like Uber. Explain the system architecture, database design, caching strategy, load balancing, and fault tolerance."
+  },
+  {
+    "response": "Designing a scalable ride-sharing backend involves multiple components that work together to handle user requests, manage data, and ensure smooth operations. Below is a high-level description of system architecture, database design, caching strategy, load balancing, and fault tolerance.\n\n### System Architecture\n\n1. **Microservices Architecture**:\n   - Split the backend into several microservices to handle different functionalities:\n     - **User Service**: Manages user accounts, profiles, and authentication.\n     - **Driver Service**: Manages driver accounts, availability, and ratings.\n     - **Ride Service**: Handles ride requests, calculations of fares, trip history, and status.\n     - **Payment Service**: Manages payment processing, billing, and transaction history.\n     - **Notification Service**: Sends notifications via SMS, email, or app notifications.\n     - **Geolocation Service**: Handles location tracking and geospatial queries.\n   - Use an API Gateway to route requests to the appropriate microservices.\n\n2. **Frontend**:\n   - Mobile apps (iOS and Android) and a web application that communicate with the backend through RESTful or GraphQL APIs.\n\n### Database Design\n\n1. **Schema**:\n   - Use a relational database (e.g., PostgreSQL) for transactional data:\n     - **Users** table: User ID, name, email, password hash, etc.\n     - **Drivers** table: Driver ID, car details, rating, availability, etc.\n     - **Rides** table: Ride ID, user ID, driver ID, start location, end location, timestamp, status, fare, etc.\n     - **Payments** table: Payment ID, ride ID, user ID, amount, transaction status, etc.\n   - Consider NoSQL (e.g., MongoDB) for high-velocity data like ride requests and geolocation data.\n\n2. **Data Relationships**:\n   - One-to-many relationships between users and rides, drivers and rides, and users and payments.\n\n3. **Data Sharding**:\n   - Shard the database based on user ID or geographical location to improve scalability as user traffic increases.\n\n### Caching Strategy\n\n1. **In-Memory Caching**:\n   - Use a caching layer (e.g., Redis or Memcached) to cache frequently accessed data like:\n     - Active drivers (their locations and status).\n     - Ride fare calculations for common routes.\n     - User sessions and profile information.\n\n2. **Cache Invalidation**:\n   - Implement strategies for cache invalidation when data",
+    "strategy": "model_selection",
+    "model": "openai/gpt-4o-mini",
+    "latency_ms": 9598.99640083313,
+    "tokens": 563,
+    "cost_usd": 0.001689,
+    "hallucination_score": 0.058,
+    "risk_level": "low",
+    "cache_hit": false,
+    "explanation": "Low Risk: Response is semantically consistent and contains no speculative or uncertain language.",
+    "query": "Design a scalable ride-sharing backend like Uber. Explain the system architecture, database design, caching strategy, load balancing, and fault tolerance."
+  },
+  {
+    "response": "**Scalable URL Shortening Service Design**\n\n**Overview:**\nWe'll design a URL shortening service that uses a custom short code generator, stores links in a MongoDB database, and provides REST APIs for user interaction. The service will be hosted on a cloud-based platform (e.g., Google Cloud Platform) for scalability.\n\n**Components:**\n\n1. **Frontend:**\n\t* Client-side: React or Angular for user interface, handling user input and displaying links.\n\t* Server-side: Express.js for handling API requests and authentication.\n2. **Backend:**\n\t* Short code generator: uses UUID v4 for unique short codes.\n\t* URL storage: MongoDB for storing links and their corresponding short codes.\n\t* Cloud-based infrastructure: Google Cloud Platform for scalability and reliability.\n3. **Database:**\n\t* MongoDB Atlas for storing links, short codes, and user information.\n\t* Data backup and disaster recovery: MongoDB Atlas for automatic backups and replica sets.\n4. **APIs:**\n\t* REST API: for user interaction, including link creation, short code generation, and link retrieval.\n\n**System Architecture:**\n\n1. **API Gateway:**\n\t* Google Cloud App Engine or Cloud Functions for API management and routing.\n\t* API keys for user authentication and rate limiting.\n2. **Short Code Generator:**\n\t* uses UUID v4 for generating unique short codes.\n3. **URL Storage:**\n\t* MongoDB Atlas for storing links and their corresponding short codes.\n\t* Replica sets for high availability and data consistency.\n4. **Cloud Storage:**\n\t* Google Cloud Storage for storing static assets and images.\n\n**Database Schema:**\n\n**Links Collection:**\n```json\n{\n  \"_id\": ObjectId,\n  \"shortCode\": String,\n  \"url\": String,\n  \"createdAt\": Date,\n  \"updatedAt\": Date\n}\n```\n\n**Users Collection:**\n```json\n{\n  \"_id\": ObjectId,\n  \"username\": String,\n  \"email\": String,\n  \"password\": String,\n  \"links\": [ObjectId]\n}\n```\n\n**Endpoint Documentation:**\n\n### POST /links\n\n* **Request Body:** `url`: URL to shorten\n* **Response:** Shortened link\n\n```http\nPOST /links HTTP/1.1\nContent-Type: application/json\n\n{\n  \"url\": \"https://example.com\"\n}\n```\n\n### GET /links/:shortCode\n\n* **Path Parameters:** `shortCode`: Short code of the link\n* **",
+    "strategy": "model_selection",
+    "model": "llama-3.1-8b-instant",
+    "latency_ms": 2298.5315322875977,
+    "tokens": 571,
+    "cost_usd": 5.71e-05,
+    "hallucination_score": 0.351,
+    "risk_level": "medium",
+    "cache_hit": false,
+    "explanation": "Medium Risk: Minor inconsistency or mild speculation detected. Please cross-reference critical facts. Details: Minor differences in detail detected between multiple model runs. Contains mild hedging language (e.g., 'probably', 'likely').",
+    "query": "Design a scalable URL shortening service like Bitly."
   }
 ]

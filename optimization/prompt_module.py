@@ -1,3 +1,5 @@
+import re
+
 class PromptModule:
     TEMPLATES = {
         'coding': {
@@ -60,15 +62,38 @@ class PromptModule:
     def detect_task_type(self, query: str) -> str:
         q = query.lower()
         
-        # High-Reasoning (System Design, Distributed Systems, Backend Architecture)
-        reasoning_keywords = [
-            'riddle', 'puzzle', 'logic', 'reason', 'proof', 'step-by-step', 'deduce', 'contradiction',
-            'distributed system', 'backend architecture', 'system design', 'scalability', 'database', 
-            'caching', 'load balancing', 'fault tolerance', 'microservices', 'cloud architecture', 'api design',
-            'load balancer', 'failover', 'sharding', 'replication', 'message queue', 'nosql', 'relational db',
-            'consistent hashing', 'rate limiting', 'circuit breaker'
+        # High-Reasoning (System Design Patterns, Engineering Terminology, Logic/Puzzles)
+        system_design_patterns = [
+            r'\bdesign\s+a\b',
+            r'\bhow\s+(?:would|do|can)\s+(?:we|you)\s+design\b',
+            r'\barchitecture\s+(?:of|for)\b',
+            r'\bbuild\s+a\s+(?:scalable|distributed|resilient|fault-tolerant|high-throughput|concurrent|realtime|real-time)\b',
+            r'\bhow\s+to\s+scale\b',
+            r'\bscaling\s+a\b',
+            r'\bsystem\s+design\b',
+            r'\bsoftware\s+architecture\b',
+            r'\bdistributed\s+system\b',
+            r'\bbackend\s+architecture\b',
+            r'\bcloud\s+architecture\b',
+            r'\bapi\s+design\b'
         ]
-        if any(w in q for w in reasoning_keywords):
+        
+        engineering_terms = [
+            'load balancer', 'load balancing', 'failover', 'sharding', 'replication', 
+            'message queue', 'message broker', 'pubsub', 'pub-sub', 'event-driven', 'event driven',
+            'nosql', 'relational db', 'datastore', 'caching', 'consistent hashing', 
+            'rate limiting', 'rate limiter', 'circuit breaker', 'backpressure', 'idempotency',
+            'horizontal scaling', 'vertical scaling', 'microservices', 'fault tolerance', 
+            'fault-tolerant', 'websockets', 'websocket', 'grpc', 'cdn', 'reverse proxy'
+        ]
+        
+        riddle_patterns = [
+            'riddle', 'puzzle', 'logic', 'reason', 'proof', 'step-by-step', 'deduce', 'contradiction'
+        ]
+        
+        if any(re.search(pat, q) for pat in system_design_patterns) or \
+           any(term in q for term in engineering_terms) or \
+           any(r in q for r in riddle_patterns):
             return 'reasoning'
 
         # Coding
