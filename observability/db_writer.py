@@ -11,6 +11,8 @@ import time
 
 class DBWriter:
     def __init__(self):
+        import threading
+        self._lock = threading.Lock()
         self._engine = None
         self._db_offline = False
         self._last_db_check = 0
@@ -21,25 +23,29 @@ class DBWriter:
         if self._db_offline and (now - self._last_db_check < 60):
             return None
 
-        if self._engine is None or self._db_offline:
-            self._last_db_check = now
-            db_url = os.getenv('DATABASE_URL')
-            if not db_url:
-                logger.warning("DATABASE_URL not set – DBWriter disabled.")
-                self._db_offline = True
+        with self._lock:
+            # Check offline state again under lock
+            if self._db_offline and (now - self._last_db_check < 60):
                 return None
-            try:
-                self._engine = create_engine(db_url, pool_pre_ping=True, connect_args={"connect_timeout": 2})
-                with self._engine.connect() as conn:
-                    conn.execute(text("SELECT 1"))
-                self._db_offline = False
-                logger.info("DBWriter connected to database.")
-            except Exception as e:
-                logger.warning(f"DBWriter DB connection failed: {e}. Retrying in 60s.")
-                self._engine = None
-                self._db_offline = True
-                return None
-        return self._engine
+            if self._engine is None or self._db_offline:
+                self._last_db_check = now
+                db_url = os.getenv('DATABASE_URL')
+                if not db_url:
+                    logger.warning("DATABASE_URL not set – DBWriter disabled.")
+                    self._db_offline = True
+                    return None
+                try:
+                    self._engine = create_engine(db_url, pool_pre_ping=True, connect_args={"connect_timeout": 2})
+                    with self._engine.connect() as conn:
+                        conn.execute(text("SELECT 1"))
+                    self._db_offline = False
+                    logger.info("DBWriter connected to database.")
+                except Exception as e:
+                    logger.warning(f"DBWriter DB connection failed: {e}. Retrying in 60s.")
+                    self._engine = None
+                    self._db_offline = True
+                    return None
+            return self._engine
 
     def write_event(self, event: dict):
         engine = self._get_engine()

@@ -44,6 +44,8 @@ from hallucination.detector import get_embedder
 
 class CacheModule:
     def __init__(self, threshold=0.75):
+        import threading
+        self._lock = threading.Lock()
         self._redis = None
         self._redis_offline = True
         self.model = get_embedder()
@@ -52,7 +54,6 @@ class CacheModule:
         self._in_memory_cache = []          # List of dicts: {'query': str, 'response': str, 'embedding': list}
         
         # Start connection check loop in background thread
-        import threading
         threading.Thread(target=self._check_redis_connection_loop, daemon=True).start()
 
     def _check_redis_connection_loop(self):
@@ -120,7 +121,10 @@ class CacheModule:
         # Fallback to In-Memory Cache
         best_score = 0.0
         best_entry = None
-        for entry in self._in_memory_cache:
+        with self._lock:
+            cache_copy = list(self._in_memory_cache)
+            
+        for entry in cache_copy:
             cached_vec = np.array(entry['embedding'])
             score = self._cosine_similarity(query_vec, cached_vec)
             if score > best_score:
@@ -146,11 +150,12 @@ class CacheModule:
             embedding = self._embed(query).tolist()
         
         # Save to In-Memory Cache
-        self._in_memory_cache.append({
-            'query': query,
-            'response': response,
-            'embedding': embedding
-        })
+        with self._lock:
+            self._in_memory_cache.append({
+                'query': query,
+                'response': response,
+                'embedding': embedding
+            })
         logger.info(f"Cache SET (In-Memory) | query='{query}'")
 
         r = self._get_redis()

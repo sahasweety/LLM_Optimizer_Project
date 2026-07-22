@@ -13,6 +13,8 @@ class DecisionEngine:
     EPSILON = 0.1
 
     def __init__(self):
+        import threading
+        self._lock = threading.Lock()
         self._db = None
         self._db_offline = False
         self._last_db_check = 0
@@ -26,26 +28,30 @@ class DecisionEngine:
         if self._db_offline and (now - self._last_db_check < 60):
             return None
 
-        if self._db is None or self._db_offline:
-            self._last_db_check = now
-            db_url = os.getenv('DATABASE_URL')
-            if not db_url:
-                logger.warning("DATABASE_URL not set – DecisionEngine running without DB.")
-                self._db_offline = True
+        with self._lock:
+            # Check offline state again under lock
+            if self._db_offline and (now - self._last_db_check < 60):
                 return None
-            try:
-                self._db = create_engine(db_url, pool_pre_ping=True, connect_args={"connect_timeout": 2})
-                # Quick connectivity check
-                with self._db.connect() as conn:
-                    conn.execute(text("SELECT 1"))
-                self._db_offline = False
-                logger.info("DecisionEngine DB connected successfully.")
-            except Exception as e:
-                logger.warning(f"DecisionEngine DB connection failed: {e}. Retrying in 60s.")
-                self._db = None
-                self._db_offline = True
-                return None
-        return self._db
+            if self._db is None or self._db_offline:
+                self._last_db_check = now
+                db_url = os.getenv('DATABASE_URL')
+                if not db_url:
+                    logger.warning("DATABASE_URL not set – DecisionEngine running without DB.")
+                    self._db_offline = True
+                    return None
+                try:
+                    self._db = create_engine(db_url, pool_pre_ping=True, connect_args={"connect_timeout": 2})
+                    # Quick connectivity check
+                    with self._db.connect() as conn:
+                        conn.execute(text("SELECT 1"))
+                    self._db_offline = False
+                    logger.info("DecisionEngine DB connected successfully.")
+                except Exception as e:
+                    logger.warning(f"DecisionEngine DB connection failed: {e}. Retrying in 60s.")
+                    self._db = None
+                    self._db_offline = True
+                    return None
+            return self._db
 
     def _calculate_score(self, avg_latency, avg_cost, avg_tokens, avg_hallucination, cache_hit_rate, count) -> float:
         # Normalize each metric (0.0 to 1.0 scale)
@@ -76,17 +82,18 @@ class DecisionEngine:
 
     def log_query(self, strategy, latency_ms, tokens, cost_usd, hallucination_score, cache_hit):
         """Append query metrics to the in-memory log and trigger weights update."""
-        self.in_memory_history.append({
-            'strategy': strategy,
-            'latency_ms': latency_ms,
-            'tokens': tokens,
-            'cost_usd': cost_usd,
-            'hallucination_score': hallucination_score,
-            'cache_hit': cache_hit
-        })
-        # Bound in-memory history to last 100 queries to prevent memory leaks
-        if len(self.in_memory_history) > 100:
-            self.in_memory_history.pop(0)
+        with self._lock:
+            self.in_memory_history.append({
+                'strategy': strategy,
+                'latency_ms': latency_ms,
+                'tokens': tokens,
+                'cost_usd': cost_usd,
+                'hallucination_score': hallucination_score,
+                'cache_hit': cache_hit
+            })
+            # Bound in-memory history to last 100 queries to prevent memory leaks
+            if len(self.in_memory_history) > 100:
+                self.in_memory_history.pop(0)
         self.update_weights()
 
     def update_weights(self):
@@ -119,7 +126,10 @@ class DecisionEngine:
                 logger.warning(f"Failed to fetch DB stats: {e}")
 
         # 2. Add/fallback to in-memory history logs
-        for item in self.in_memory_history:
+        with self._lock:
+            history_copy = list(self.in_memory_history)
+            
+        for item in history_copy:
             strat = item['strategy']
             if strat == 'model_selection':
                 strat = 'baseline'
