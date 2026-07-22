@@ -4,6 +4,7 @@ import hashlib
 import numpy as np
 import logging
 import re
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -44,23 +45,33 @@ from hallucination.detector import get_embedder
 class CacheModule:
     def __init__(self, threshold=0.75):
         self._redis = None
+        self._redis_offline = True
         self.model = get_embedder()
         self.threshold = threshold          # set to 0.75 for a balanced trade-off
         self.cache_prefix = 'llm_cache:'
         self._in_memory_cache = []          # List of dicts: {'query': str, 'response': str, 'embedding': list}
+        
+        # Start connection check loop in background thread
+        import threading
+        threading.Thread(target=self._check_redis_connection_loop, daemon=True).start()
 
-    def _get_redis(self):
-        """Lazy Redis connection – returns None if unavailable."""
-        if self._redis is None:
+    def _check_redis_connection_loop(self):
+        while True:
             try:
-                r = redis.Redis(host='localhost', port=6379, db=0,
-                                socket_connect_timeout=3)
+                r = redis.Redis(host='127.0.0.1', port=6379, db=0,
+                                socket_timeout=0.5, socket_connect_timeout=0.5)
                 r.ping()
                 self._redis = r
-                logger.info("Redis connected successfully.")
-            except Exception as e:
-                logger.warning(f"Redis not available: {e}")
-                return None
+                self._redis_offline = False
+            except Exception:
+                self._redis = None
+                self._redis_offline = True
+            time.sleep(60)
+
+    def _get_redis(self):
+        """Returns the background-established Redis instance, or None if offline."""
+        if self._redis_offline or self._redis is None:
+            return None
         return self._redis
 
     def _embed(self, text: str) -> np.ndarray:
@@ -69,8 +80,12 @@ class CacheModule:
     def _cosine_similarity(self, a, b) -> float:
         return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
-    def get(self, query: str):
-        query_vec = self._embed(query)
+    def get(self, query: str, query_embedding=None):
+        if query_embedding is not None:
+            query_vec = query_embedding
+        else:
+            query_vec = self._embed(query)
+            
         r = self._get_redis()
         
         if r is not None:
@@ -124,8 +139,11 @@ class CacheModule:
 
         return None
 
-    def set(self, query: str, response: str):
-        embedding = self._embed(query).tolist()
+    def set(self, query: str, response: str, query_embedding=None):
+        if query_embedding is not None:
+            embedding = query_embedding.tolist() if hasattr(query_embedding, 'tolist') else query_embedding
+        else:
+            embedding = self._embed(query).tolist()
         
         # Save to In-Memory Cache
         self._in_memory_cache.append({

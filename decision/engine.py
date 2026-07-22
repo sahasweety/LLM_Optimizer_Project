@@ -14,25 +14,36 @@ class DecisionEngine:
 
     def __init__(self):
         self._db = None
+        self._db_offline = False
+        self._last_db_check = 0
         self.weights = {s: 1.0 for s in self.STRATEGIES}
         self.in_memory_history = []  # Fallback history storage: list of dicts
 
     def _get_db(self):
-        """Lazy DB engine – returns None if DATABASE_URL is missing or unreachable."""
-        if self._db is None:
+        """Lazy DB engine – returns None if DATABASE_URL is missing or unreachable with a 60-second cool-off."""
+        import time
+        now = time.time()
+        if self._db_offline and (now - self._last_db_check < 60):
+            return None
+
+        if self._db is None or self._db_offline:
+            self._last_db_check = now
             db_url = os.getenv('DATABASE_URL')
             if not db_url:
                 logger.warning("DATABASE_URL not set – DecisionEngine running without DB.")
+                self._db_offline = True
                 return None
             try:
-                self._db = create_engine(db_url, pool_pre_ping=True)
+                self._db = create_engine(db_url, pool_pre_ping=True, connect_args={"connect_timeout": 2})
                 # Quick connectivity check
                 with self._db.connect() as conn:
                     conn.execute(text("SELECT 1"))
+                self._db_offline = False
                 logger.info("DecisionEngine DB connected successfully.")
             except Exception as e:
-                logger.warning(f"DecisionEngine DB connection failed: {e}")
+                logger.warning(f"DecisionEngine DB connection failed: {e}. Retrying in 60s.")
                 self._db = None
+                self._db_offline = True
                 return None
         return self._db
 

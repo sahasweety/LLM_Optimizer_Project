@@ -9,11 +9,11 @@ class OptimizationController:
         self.prompt = PromptModule()
         self.selector = ModelSelector()
 
-    def process(self, query: str, engine=None) -> dict:
+    def process(self, query: str, engine=None, query_embedding=None) -> dict:
         start = time.time()
 
         # Step 1: Check cache first
-        cached = self.cache.get(query)
+        cached = self.cache.get(query, query_embedding=query_embedding)
         if cached:
             return {
                 'response': cached['response'],

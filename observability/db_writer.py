@@ -7,25 +7,37 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+import time
+
 class DBWriter:
     def __init__(self):
         self._engine = None
+        self._db_offline = False
+        self._last_db_check = 0
 
     def _get_engine(self):
-        """Lazy DB engine – connects only when needed."""
-        if self._engine is None:
+        """Lazy DB engine – connects only when needed with a 60-second cool-off retry."""
+        now = time.time()
+        if self._db_offline and (now - self._last_db_check < 60):
+            return None
+
+        if self._engine is None or self._db_offline:
+            self._last_db_check = now
             db_url = os.getenv('DATABASE_URL')
             if not db_url:
                 logger.warning("DATABASE_URL not set – DBWriter disabled.")
+                self._db_offline = True
                 return None
             try:
-                self._engine = create_engine(db_url, pool_pre_ping=True)
+                self._engine = create_engine(db_url, pool_pre_ping=True, connect_args={"connect_timeout": 2})
                 with self._engine.connect() as conn:
                     conn.execute(text("SELECT 1"))
+                self._db_offline = False
                 logger.info("DBWriter connected to database.")
             except Exception as e:
-                logger.warning(f"DBWriter DB connection failed: {e}")
+                logger.warning(f"DBWriter DB connection failed: {e}. Retrying in 60s.")
                 self._engine = None
+                self._db_offline = True
                 return None
         return self._engine
 

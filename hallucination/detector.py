@@ -129,17 +129,31 @@ class HallucinationDetector:
             
         # 2. Confidence / Hedging / Speculative Check
         conf_score = self._confidence_score(query, response)
+        
+        # 3. Determine if consistency verification is needed
+        # We only run expensive verification if:
+        # - Confidence score is high (uncertainty/speculation detected)
+        # - OR it's a high-complexity query (complexity >= 0.5)
+        # - OR model is 'expert' or 'powerful' tier
+        complexity = model_info.get('complexity', 0.0)
+        tier = model_info.get('tier', 'fast')
+        
+        needs_verification = (conf_score >= 0.25) or (complexity >= 0.5) or (tier in ('expert', 'powerful'))
+        
+        if needs_verification:
+            consist_score = self._consistency_score(query, model_info)
+            if consist_score > 0.4:
+                reasons.append("High inconsistency detected between multiple model runs, suggesting potential fabrication.")
+            elif consist_score > 0.15:
+                reasons.append("Minor differences in detail detected between multiple model runs.")
+        else:
+            consist_score = 0.0
+            reasons.append("Response verified instantly via lightweight heuristics (no speculation or logical risk found).")
+
         if conf_score > 0.4:
             reasons.append("Contains highly speculative phrasing or uncertainty markers.")
         elif conf_score > 0.15:
             reasons.append("Contains mild hedging language (e.g., 'probably', 'likely').")
-            
-        # 3. Consistency check (Semantic variance across multiple runs)
-        consist_score = self._consistency_score(query, model_info)
-        if consist_score > 0.4:
-            reasons.append("High inconsistency detected between multiple model runs, suggesting potential fabrication.")
-        elif consist_score > 0.15:
-            reasons.append("Minor differences in detail detected between multiple model runs.")
             
         # Compute final score
         final = (conf_score * 0.45) + (consist_score * 0.55)

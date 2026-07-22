@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 import os
 import logging
@@ -49,27 +49,63 @@ async def on_startup():
     logger.info("📖 Docs available at http://127.0.0.1:8081/docs")
 
 
+def safe_log_cache_hit(engine, opt):
+    try:
+        engine.log_query(
+            strategy='cache',
+            latency_ms=opt['latency_ms'],
+            tokens=0,
+            cost_usd=0.0,
+            hallucination_score=0.0,
+            cache_hit=True
+        )
+    except Exception as e:
+        logger.warning(f"Failed to log cache hit to engine: {e}")
+
+
+def safe_log_query_metrics(engine, collector, query, llm_result, opt, halluc):
+    # Emit event to Kafka (non-blocking; fails gracefully)
+    try:
+        collector.emit_llm_call(
+            query=query,
+            response=llm_result['response'],
+            strategy=opt['strategy'],
+            model=opt['model']['name'],
+            latency_ms=llm_result['latency_ms'],
+            tokens=llm_result['tokens'],
+            cost=llm_result['cost_usd'],
+            hallucination_score=halluc['hallucination_score']
+        )
+    except Exception as e:
+        logger.warning(f"Kafka emit failed (non-fatal): {e}")
+
+    # Log query metrics to DecisionEngine
+    try:
+        engine.log_query(
+            strategy=opt['strategy'],
+            latency_ms=llm_result['latency_ms'],
+            tokens=llm_result['tokens'],
+            cost_usd=llm_result['cost_usd'],
+            hallucination_score=halluc['hallucination_score'],
+            cache_hit=False
+        )
+    except Exception as e:
+        logger.warning(f"Failed to log query to engine: {e}")
+
+
 @app.post('/query', response_model=QueryResponse)
-async def process_query(req: QueryRequest):
+async def process_query(req: QueryRequest, background_tasks: BackgroundTasks):
     if not req.query or not req.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
 
     try:
-        opt = controller.process(req.query, engine)
+        # Precompute query embedding once per request
+        query_embedding = controller.cache._embed(req.query)
+        opt = controller.process(req.query, engine, query_embedding=query_embedding)
 
         # ── Cache hit path ────────────────────────────────────────────────────
         if opt.get('cache_hit'):
-            try:
-                engine.log_query(
-                    strategy='cache',
-                    latency_ms=opt['latency_ms'],
-                    tokens=0,
-                    cost_usd=0.0,
-                    hallucination_score=0.0,
-                    cache_hit=True
-                )
-            except Exception as e:
-                logger.warning(f"Failed to log cache hit to engine: {e}")
+            background_tasks.add_task(safe_log_cache_hit, engine, opt)
 
             return QueryResponse(
                 response=opt['response'],
@@ -91,36 +127,19 @@ async def process_query(req: QueryRequest):
         halluc = detector.score(
             req.query, llm_result['response'], opt['model'])
 
-        # Store in cache for future hits
-        controller.cache.set(req.query, llm_result['response'])
+        # Store in cache for future hits in background
+        background_tasks.add_task(controller.cache.set, req.query, llm_result['response'], query_embedding)
 
-        # Emit event to Kafka (non-blocking; fails gracefully)
-        try:
-            collector.emit_llm_call(
-                query=req.query,
-                response=llm_result['response'],
-                strategy=opt['strategy'],
-                model=opt['model']['name'],
-                latency_ms=llm_result['latency_ms'],
-                tokens=llm_result['tokens'],
-                cost=llm_result['cost_usd'],
-                hallucination_score=halluc['hallucination_score']
-            )
-        except Exception as e:
-            logger.warning(f"Kafka emit failed (non-fatal): {e}")
-
-        # Log query metrics to DecisionEngine
-        try:
-            engine.log_query(
-                strategy=opt['strategy'],
-                latency_ms=llm_result['latency_ms'],
-                tokens=llm_result['tokens'],
-                cost_usd=llm_result['cost_usd'],
-                hallucination_score=halluc['hallucination_score'],
-                cache_hit=False
-            )
-        except Exception as e:
-            logger.warning(f"Failed to log query to engine: {e}")
+        # Log query metrics and emit to Kafka in background
+        background_tasks.add_task(
+            safe_log_query_metrics,
+            engine,
+            collector,
+            req.query,
+            llm_result,
+            opt,
+            halluc
+        )
 
         return QueryResponse(
             response=llm_result['response'],
