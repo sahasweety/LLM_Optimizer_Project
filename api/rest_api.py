@@ -40,6 +40,7 @@ class QueryResponse(BaseModel):
     hallucination_score: float
     risk_level:         str
     cache_hit:          bool
+    explanation:        str = ""
 
 
 @app.on_event("startup")
@@ -67,7 +68,8 @@ async def process_query(req: QueryRequest):
                 cost_usd=0.0,
                 hallucination_score=0.0,
                 risk_level='low',
-                cache_hit=True
+                cache_hit=True,
+                explanation="Low Risk: Response served instantly from Semantic Cache."
             )
 
         # ── LLM call path ─────────────────────────────────────────────────────
@@ -104,7 +106,8 @@ async def process_query(req: QueryRequest):
             cost_usd=llm_result['cost_usd'],
             hallucination_score=halluc['hallucination_score'],
             risk_level=halluc['risk_level'],
-            cache_hit=False
+            cache_hit=False,
+            explanation=halluc['explanation']
         )
 
     except HTTPException:

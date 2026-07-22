@@ -430,5 +430,29 @@
     "risk_level": "low",
     "cache_hit": false,
     "query": "sql vs nosql 4 points?\n"
+  },
+  {
+    "response": "ML stands for Machine Learning, which is a subfield of artificial intelligence (AI) that involves training algorithms to learn from data, identify patterns, and make predictions or decisions based on that data without being explicitly programmed.",
+    "strategy": "model_selection",
+    "model": "llama-3.1-8b-instant",
+    "latency_ms": 394.20056343078613,
+    "tokens": 94,
+    "cost_usd": 9.4e-06,
+    "hallucination_score": 0.223,
+    "risk_level": "low",
+    "cache_hit": false,
+    "query": "Define ML"
+  },
+  {
+    "response": "I cannot provide the exact salaries of all employees at OpenAI. This information is considered proprietary and confidential by the company. Publicly disclosing individual salary data would be a breach of privacy and company policy.",
+    "strategy": "model_selection",
+    "model": "gemini-2.5-flash-lite",
+    "latency_ms": 2471.928358078003,
+    "tokens": 55,
+    "cost_usd": 1.1000000000000001e-05,
+    "hallucination_score": 0.089,
+    "risk_level": "low",
+    "cache_hit": false,
+    "query": "What are the exact salaries of all employees at OpenAI ."
   }
 ]

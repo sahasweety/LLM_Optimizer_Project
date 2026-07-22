@@ -107,17 +107,69 @@ class HallucinationDetector:
             logger.warning(f"Consistency check error: {e} — using neutral score 0.3")
             return 0.3
 
+    REFUSAL_PHRASES = [
+        "cannot answer", "don't have access", "do not have access", 
+        "cannot verify", "unable to provide", "as an ai", "sorry, but", 
+        "cannot provide", "i do not know", "i don't know", "real-time data", 
+        "my knowledge cutoff", "is not available", "cannot confirm"
+    ]
+
+    def _detect_refusal(self, response: str) -> bool:
+        text = response.lower()
+        return any(p in text for p in self.REFUSAL_PHRASES)
+
     def score(self, query: str, response: str, model_info: dict) -> dict:
-        conf    = self._confidence_score(query, response)
-        consist = self._consistency_score(query, model_info)
-
-        final = (conf * 0.45) + (consist * 0.55)
+        reasons = []
+        
+        # 1. Refusal Check
+        if self._detect_refusal(response):
+            return {
+                'hallucination_score': 0.0,
+                'risk_level': 'low',
+                'explanation': 'Low Risk: The model correctly and safely refused to answer, avoiding hallucination.',
+                'confidence_check': 0.0,
+                'consistency_check': 0.0
+            }
+            
+        # 2. Confidence / Hedging / Speculative Check
+        conf_score = self._confidence_score(query, response)
+        if conf_score > 0.4:
+            reasons.append("Contains highly speculative phrasing or uncertainty markers.")
+        elif conf_score > 0.15:
+            reasons.append("Contains mild hedging language (e.g., 'probably', 'likely').")
+            
+        # 3. Consistency check (Semantic variance across multiple runs)
+        consist_score = self._consistency_score(query, model_info)
+        if consist_score > 0.4:
+            reasons.append("High inconsistency detected between multiple model runs, suggesting potential fabrication.")
+        elif consist_score > 0.15:
+            reasons.append("Minor differences in detail detected between multiple model runs.")
+            
+        # Compute final score
+        final = (conf_score * 0.45) + (consist_score * 0.55)
         final = min(final, 1.0)
-
+        
+        # Risk level determination
+        if final > 0.5:
+            risk = 'high'
+            base_desc = "High Risk: The response has high semantic inconsistency across attempts and/or relies heavily on speculative statements."
+        elif final > 0.25:
+            risk = 'medium'
+            base_desc = "Medium Risk: Minor inconsistency or mild speculation detected. Please cross-reference critical facts."
+        else:
+            risk = 'low'
+            base_desc = "Low Risk: Response is semantically consistent and contains no speculative or uncertain language."
+            
+        # Build explanation
+        if reasons:
+            explanation = f"{base_desc} Details: " + " ".join(reasons)
+        else:
+            explanation = base_desc
+            
         return {
             'hallucination_score': round(final, 3),
-            'risk_level':          'high'   if final > 0.5  else
-                                   'medium' if final > 0.25 else 'low',
-            'confidence_check':    round(conf, 3),
-            'consistency_check':   round(consist, 3)
+            'risk_level': risk,
+            'explanation': explanation,
+            'confidence_check': round(conf_score, 3),
+            'consistency_check': round(consist_score, 3)
         }
