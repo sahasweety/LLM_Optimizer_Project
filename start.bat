@@ -13,14 +13,20 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8501 ^| findstr LISTENING') 
 echo.
 
 echo [1/4] Starting Docker services (optional)...
-docker-compose up -d 2>nul
+powershell -Command "$p = Start-Process docker -ArgumentList 'info' -PassThru -WindowStyle Hidden; if (-not $p.WaitForExit(3000)) { Stop-Process -Id $p.Id -Force; exit 1 } exit $p.ExitCode" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo [WARNING] Docker not available - Kafka/Redis features will be skipped.
+    echo [WARNING] Docker is not running or unreachable - Kafka/Redis features will be skipped.
     echo           The API and Dashboard will still work normally.
 ) else (
-    echo Waiting for Docker services to initialize...
-    timeout /t 10 /nobreak > nul
-    echo Docker services started!
+    docker-compose up -d 2>nul
+    if %ERRORLEVEL% NEQ 0 (
+        echo [WARNING] Docker compose failed - Kafka/Redis features will be skipped.
+        echo           The API and Dashboard will still work normally.
+    ) else (
+        echo Waiting for Docker services to initialize...
+        ping 127.0.0.1 -n 11 > nul
+        echo Docker services started!
+    )
 )
 echo.
 
@@ -31,7 +37,7 @@ echo Waiting for API server to be ready...
 :: Poll /health every 2 seconds until it responds OK (max 60 seconds / 30 attempts)
 set /a attempts=0
 :wait_api
-timeout /t 2 /nobreak > nul
+ping 127.0.0.1 -n 3 > nul
 set /a attempts+=1
 curl -s -o nul -w "%%{http_code}" http://127.0.0.1:8081/health 2>nul | findstr "200" > nul
 if %ERRORLEVEL% EQU 0 (
@@ -45,14 +51,14 @@ echo.
 
 echo [3/4] Starting Stream Processor...
 start "Stream Processor" cmd /k "cd /d "%~dp0" && .venv\Scripts\python.exe run_processor.py"
-timeout /t 3 /nobreak > nul
+ping 127.0.0.1 -n 4 > nul
 echo Stream Processor started!
 echo.
 
 echo [4/4] Starting Streamlit Dashboard...
 start "Streamlit Dashboard" cmd /k "cd /d "%~dp0" && .venv\Scripts\python.exe -m streamlit run dashboard.py --server.headless true"
 echo Waiting for Streamlit to be ready...
-timeout /t 10 /nobreak > nul
+ping 127.0.0.1 -n 11 > nul
 echo Streamlit started!
 echo.
 
@@ -63,7 +69,7 @@ echo   API Docs:  http://127.0.0.1:8081/docs
 echo ========================================
 echo.
 
-start chrome http://localhost:8501
+start http://localhost:8501
 
 echo Press any key to exit this window...
 pause > nul

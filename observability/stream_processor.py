@@ -3,6 +3,7 @@ from collections import defaultdict
 import json
 import time
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +20,10 @@ class StreamProcessor:
         """Lazy Kafka consumer – retries connection until available."""
         if self._consumer is None:
             try:
+                kafka_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
                 self._consumer = KafkaConsumer(
                     'llm-events',
-                    bootstrap_servers=['localhost:9092'],
+                    bootstrap_servers=[kafka_servers],
                     value_deserializer=lambda m: json.loads(m.decode('utf-8')),
                     group_id='stream-processor',
                     auto_offset_reset='latest',

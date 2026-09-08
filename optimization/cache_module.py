@@ -5,6 +5,7 @@ import numpy as np
 import logging
 import re
 import time
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +60,8 @@ class CacheModule:
     def _check_redis_connection_loop(self):
         while True:
             try:
-                r = redis.Redis(host='127.0.0.1', port=6379, db=0,
-                                socket_timeout=0.5, socket_connect_timeout=0.5)
+                redis_url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+                r = redis.Redis.from_url(redis_url, socket_timeout=0.5, socket_connect_timeout=0.5)
                 r.ping()
                 self._redis = r
                 self._redis_offline = False

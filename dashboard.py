@@ -7,7 +7,7 @@ import time
 import json
 import os
 
-API_URL = "http://127.0.0.1:8081"
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8081")
 HISTORY_FILE = "query_history.json"
 
 st.set_page_config(

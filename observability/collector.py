@@ -2,6 +2,7 @@ import json
 import time
 import uuid
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +31,9 @@ class FeedbackCollector:
                 try:
                     # Import lazily so missing kafka-python never crashes the API
                     from kafka import KafkaProducer  # noqa: PLC0415
+                    kafka_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
                     self._producer = KafkaProducer(
-                        bootstrap_servers=['localhost:9092'],
+                        bootstrap_servers=[kafka_servers],
                         value_serializer=lambda v: json.dumps(v).encode('utf-8'),
                         acks='all',
                         retries=3,

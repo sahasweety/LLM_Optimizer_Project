@@ -31,8 +31,48 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+
+  api:
+    build: .
+    command: python -m uvicorn api.rest_api:app --host 0.0.0.0 --port 8081
+    ports:
+      - "8081:8081"
+    environment:
+      - DATABASE_URL=postgresql://admin:secret@postgres:5432/llmplatform
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+
+  processor:
+    build: .
+    command: python run_processor.py
+    environment:
+      - DATABASE_URL=postgresql://admin:secret@postgres:5432/llmplatform
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      - postgres
+      - kafka
+      - api
+
+  dashboard:
+    build: .
+    command: streamlit run dashboard.py --server.headless true --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8081
+      - DATABASE_URL=postgresql://admin:secret@postgres:5432/llmplatform
+    depends_on:
+      - api
+      - postgres
 
 volumes:
   pgdata:

@@ -3,7 +3,7 @@ from .prompt_module import PromptModule
 class ModelSelector:
     MODELS = {
         'fast': {
-            'name': 'llama-3.1-8b-instant',
+            'name': 'openai/gpt-oss-20b',
             'provider': 'groq',
             'cost_per_1k': 0.0001,
             'max_tokens': 4096,

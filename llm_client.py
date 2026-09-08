@@ -34,7 +34,7 @@ class LLMClient:
     def call(self, system: str, prompt: str, model_info: dict) -> dict:
         start = time.time()
         provider = model_info.get('provider', 'groq')
-        model    = model_info.get('name', 'llama-3.1-8b-instant')
+        model    = model_info.get('name', 'openai/gpt-oss-20b')
 
         try:
             if provider == 'groq':
@@ -78,7 +78,7 @@ class LLMClient:
         except Exception as e:
             logger.warning(f"Provider '{provider}' failed: {e}. Falling back to Groq.")
             res = self.groq.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="openai/gpt-oss-120b",
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user",   "content": prompt}
