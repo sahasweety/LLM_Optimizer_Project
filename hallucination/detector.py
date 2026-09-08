@@ -1,5 +1,6 @@
 import numpy as np
-from sentence_transformers import SentenceTransformer
+import google.generativeai as genai
+import os
 import logging
 import concurrent.futures
 
@@ -14,11 +15,25 @@ _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 # Timeout (seconds) for the entire consistency check
 CONSISTENCY_TIMEOUT = 10
 
+class RemoteEmbedder:
+    def __init__(self):
+        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+        
+    def encode(self, texts):
+        if isinstance(texts, str):
+            texts = [texts]
+        result = genai.embed_content(
+            model="models/embedding-001",
+            content=texts,
+            task_type="retrieval_document"
+        )
+        return result['embedding']
+
 def get_embedder():
     global _shared_embedder
     if _shared_embedder is None:
-        logger.info("Loading SentenceTransformer model (first use)...")
-        _shared_embedder = SentenceTransformer('all-MiniLM-L6-v2', local_files_only=True)
+        logger.info("Initializing Google Gemini Embedder...")
+        _shared_embedder = RemoteEmbedder()
     return _shared_embedder
 
 
