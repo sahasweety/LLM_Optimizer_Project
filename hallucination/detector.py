@@ -23,7 +23,7 @@ class RemoteEmbedder:
         if isinstance(texts, str):
             texts = [texts]
         result = genai.embed_content(
-            model="models/text-embedding-004",
+            model="models/gemini-embedding-2",
             content=texts,
             task_type="retrieval_document"
         )
