@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import os
 import logging
 from dotenv import load_dotenv
+import threading
 
 load_dotenv()
 
@@ -25,6 +26,19 @@ llm_client = LLMClient()
 detector   = HallucinationDetector(llm_client)
 collector  = FeedbackCollector()
 engine     = DecisionEngine()
+
+def start_stream_processor():
+    try:
+        from observability.stream_processor import StreamProcessor
+        from observability.db_writer import DBWriter
+        db = DBWriter()
+        processor = StreamProcessor(db_writer=db)
+        logger.info("Starting built-in Stream Processor background thread...")
+        processor.run()
+    except Exception as e:
+        logger.error(f"Stream Processor failed to start: {e}")
+
+threading.Thread(target=start_stream_processor, daemon=True).start()
 
 
 class QueryRequest(BaseModel):
