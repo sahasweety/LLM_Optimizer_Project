@@ -1,0 +1,61 @@
+services:
+  # 1. API Service
+  - type: web
+    name: llm-api
+    env: python
+    region: ohio
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn api.rest_api:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+      - key: KAFKA_USERNAME
+        sync: false
+      - key: KAFKA_PASSWORD
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+
+  # 2. Dashboard Service
+  - type: web
+    name: llm-dashboard
+    env: python
+    region: ohio
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "streamlit run dashboard.py --server.port $PORT --server.address 0.0.0.0"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: API_URL
+        value: "https://llm-api.onrender.com"
+      - key: DATABASE_URL
+        sync: false
+
+  # 3. Stream Processor Background Worker
+  - type: worker
+    name: llm-processor
+    env: python
+    region: ohio
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python run_processor.py"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: DATABASE_URL
+        sync: false
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+      - key: KAFKA_USERNAME
+        sync: false
+      - key: KAFKA_PASSWORD
+        sync: false

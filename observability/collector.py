@@ -32,14 +32,22 @@ class FeedbackCollector:
                     # Import lazily so missing kafka-python never crashes the API
                     from kafka import KafkaProducer  # noqa: PLC0415
                     kafka_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-                    self._producer = KafkaProducer(
-                        bootstrap_servers=[kafka_servers],
-                        value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-                        acks='all',
-                        retries=3,
-                        request_timeout_ms=1000,
-                        max_block_ms=1000,
-                    )
+                    kwargs = {
+                        'bootstrap_servers': [kafka_servers],
+                        'value_serializer': lambda v: json.dumps(v).encode('utf-8'),
+                        'acks': 'all',
+                        'retries': 3,
+                        'request_timeout_ms': 1000,
+                        'max_block_ms': 1000,
+                    }
+                    if os.getenv("KAFKA_USERNAME") and os.getenv("KAFKA_PASSWORD"):
+                        kwargs.update({
+                            'security_protocol': 'SASL_SSL',
+                            'sasl_mechanism': 'SCRAM-SHA-256',
+                            'sasl_plain_username': os.getenv("KAFKA_USERNAME"),
+                            'sasl_plain_password': os.getenv("KAFKA_PASSWORD"),
+                        })
+                    self._producer = KafkaProducer(**kwargs)
                     self._kafka_offline = False
                     logger.info("Kafka producer connected successfully.")
                 except ImportError:

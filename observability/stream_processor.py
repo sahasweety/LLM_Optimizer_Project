@@ -21,15 +21,22 @@ class StreamProcessor:
         if self._consumer is None:
             try:
                 kafka_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-                self._consumer = KafkaConsumer(
-                    'llm-events',
-                    bootstrap_servers=[kafka_servers],
-                    value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-                    group_id='stream-processor',
-                    auto_offset_reset='latest',
-                    request_timeout_ms=10000,
-                    session_timeout_ms=10000,
-                )
+                kwargs = {
+                    'bootstrap_servers': [kafka_servers],
+                    'value_deserializer': lambda m: json.loads(m.decode('utf-8')),
+                    'group_id': 'stream-processor',
+                    'auto_offset_reset': 'latest',
+                    'request_timeout_ms': 10000,
+                    'session_timeout_ms': 10000,
+                }
+                if os.getenv("KAFKA_USERNAME") and os.getenv("KAFKA_PASSWORD"):
+                    kwargs.update({
+                        'security_protocol': 'SASL_SSL',
+                        'sasl_mechanism': 'SCRAM-SHA-256',
+                        'sasl_plain_username': os.getenv("KAFKA_USERNAME"),
+                        'sasl_plain_password': os.getenv("KAFKA_PASSWORD"),
+                    })
+                self._consumer = KafkaConsumer('llm-events', **kwargs)
                 logger.info("Kafka consumer connected successfully.")
             except Exception as e:
                 logger.warning(f"Kafka consumer connection failed: {e}")
