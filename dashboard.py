@@ -216,8 +216,8 @@ def render_query_result(data: dict, show_query_header: bool = False):
     st.markdown("#### 🧠 Hallucination Analysis")
     h_col1, h_col2, h_col3 = st.columns([1, 1.1, 1.9])
     
-    score = data.get('hallucination_score', 0.0)
-    risk = data.get('risk_level', 'low').lower()
+    raw_risk = data.get('risk_level')
+    risk = (raw_risk if isinstance(raw_risk, str) else 'low').lower()
     
     with h_col1:
         # Compact gauge
@@ -269,12 +269,14 @@ def render_query_result(data: dict, show_query_header: bool = False):
         st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#8892b0;text-transform:uppercase;margin-bottom:4px;'>Evaluation Findings</div>", unsafe_allow_html=True)
         exp = data.get('explanation') or "Evaluation complete."
         st.info(exp)
-        if data.get('tier') or data.get('query_type'):
-            intended_p = data.get('intended_provider', '').upper()
-            actual_p = data.get('actual_provider', '').upper()
+        if not data.get('cache_hit') and (data.get('tier') or data.get('query_type')):
+            intended_p = (data.get('intended_provider') or '').upper() if isinstance(data.get('intended_provider'), str) else ''
+            actual_p = (data.get('actual_provider') or '').upper() if isinstance(data.get('actual_provider'), str) else ''
             prov_text = f" | Provider: `{actual_p}`" if actual_p else ""
             fb_text = " (Fallback)" if data.get('fallback_occurred') else ""
-            st.caption(f"**Routing:** Tier: `{data.get('tier', 'N/A')}` | Type: `{data.get('query_type', 'N/A')}` | Complexity: `{data.get('complexity', 0):.2f}`{prov_text}{fb_text}")
+            complexity_val = data.get('complexity')
+            comp_str = f"{complexity_val:.2f}" if isinstance(complexity_val, (int, float)) else "N/A"
+            st.caption(f"**Routing:** Tier: `{data.get('tier', 'N/A')}` | Type: `{data.get('query_type', 'N/A')}` | Complexity: `{comp_str}`{prov_text}{fb_text}")
 
 
 # ── Session state init ──────────────────────────────────────────────────────────
@@ -444,7 +446,7 @@ with tab_query:
                 'Latency (ms)':  round(h['latency_ms'], 1),
                 'Cache':         '✅' if h.get('cache_hit') else '❌',
                 'Hallucination': round(h.get('hallucination_score', 0), 3),
-                'Risk':          h.get('risk_level', 'low').upper(),
+                'Risk':          (h.get('risk_level') or 'low').upper() if isinstance(h.get('risk_level') or 'low', str) else 'LOW',
                 'Tokens':        h.get('tokens', 0),
                 'Cost ($)':      round(h.get('cost_usd', 0), 6),
             })
