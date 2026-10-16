@@ -114,6 +114,153 @@ def risk_color(risk: str) -> str:
     return {'low': '🟢', 'medium': '🟡', 'high': '🔴'}.get(risk, '⚪')
 
 
+def render_query_result(data: dict, show_query_header: bool = False):
+    """
+    Renders Query -> Answer -> Compact Performance Metrics -> Inline Hallucination Analysis.
+    Every query response has its own dedicated, accurate analysis rendered directly below it.
+    """
+    if show_query_header and data.get('query'):
+        st.markdown(f"#### ❓ Query: *{data['query']}*")
+
+    # 1. Compact Cache Status Bar (Hit or Miss)
+    if data.get('cache_hit'):
+        sim = data.get('similarity')
+        mq  = data.get('matched_query')
+        src = data.get('cache_source', 'in_memory')
+        lat = data.get('lookup_latency_ms', 0)
+        
+        sim_str = f" &nbsp;|&nbsp; Similarity: <strong>{sim:.3f}</strong>" if sim is not None else ""
+        mq_str  = f'<br/><span style="font-size:0.8rem;opacity:0.85;">Matched Query: <em>"{mq}"</em></span>' if mq else ""
+        
+        st.markdown(f"""
+        <div class="cache-status-bar cache-status-hit">
+            <div>⚡ <strong>CACHE HIT</strong> — Answer served from {src} ({lat:.1f}ms){sim_str}</div>
+            {mq_str}
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        selected_model = data.get('model', 'N/A')
+        actual_latency = data.get('latency_ms', 0)
+        tier = data.get('tier')
+        tier_info = f" ({tier.upper()} tier)" if tier else ""
+        st.markdown(f"""
+        <div class="cache-status-bar cache-status-miss">
+            <div>🌐 <strong>CACHE MISS</strong> — Fresh model call routed to <strong>{selected_model}</strong>{tier_info} &nbsp;|&nbsp; Latency: <strong>{actual_latency:.0f} ms</strong></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 2. Response (Main focus)
+    st.markdown("### 📝 Response")
+    st.write(data.get('response', ''))
+
+    # 3. Compact Performance Metrics Row
+    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+    with col_m1:
+        lat_val = f"{data.get('latency_ms', 0):.0f} ms"
+        lat_sub = f"Lookup: {data.get('lookup_latency_ms', 0):.1f}ms" if data.get('cache_hit') else "API latency"
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Latency</div>
+            <div class="metric-value">{lat_val}</div>
+            <div class="metric-sub">{lat_sub}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_m2:
+        c_val = "CACHE HIT" if data.get('cache_hit') else "CACHE MISS"
+        c_sub = f"Sim: {data.get('similarity', 0):.2f}" if data.get('cache_hit') and data.get('similarity') is not None else "Fresh API call"
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Cache Status</div>
+            <div class="metric-value" style="color: {'#34d399' if data.get('cache_hit') else '#38bdf8'};">{c_val}</div>
+            <div class="metric-sub">{c_sub}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_m3:
+        raw_model = data.get('model', 'unknown')
+        short_model = raw_model.split('/')[-1] if '/' in raw_model else raw_model
+        strat = data.get('strategy', 'auto').replace('_', ' ').title()
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Model</div>
+            <div class="metric-value" style="font-size: 0.95rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="{raw_model}">{short_model}</div>
+            <div class="metric-sub">{strat}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_m4:
+        cost = data.get('cost_usd', 0)
+        tokens = data.get('tokens', 0)
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Est. Cost</div>
+            <div class="metric-value">${cost:.5f}</div>
+            <div class="metric-sub">{tokens:,} tokens</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 4. Per-Query Hallucination Analysis (Restored directly below the answer)
+    st.markdown("#### 🧠 Hallucination Analysis")
+    h_col1, h_col2, h_col3 = st.columns([1, 1.1, 1.9])
+    
+    score = data.get('hallucination_score', 0.0)
+    risk = data.get('risk_level', 'low').lower()
+    
+    with h_col1:
+        # Compact gauge
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=score,
+            title={'text': "Risk Score", 'font': {'color': '#ccd6f6', 'size': 12}},
+            gauge={
+                'axis': {'range': [0, 1], 'tickcolor': '#8892b0', 'tickwidth': 1, 'dtick': 0.5},
+                'bar': {'color': "#e94560"},
+                'bgcolor': '#1a1a2e',
+                'steps': [
+                    {'range': [0, 0.25], 'color': '#064e3b'},
+                    {'range': [0.25, 0.5], 'color': '#78350f'},
+                    {'range': [0.5, 1.0], 'color': '#7f1d1d'}
+                ],
+                'threshold': {
+                    'line': {'color': "#e94560", 'width': 2},
+                    'thickness': 0.75,
+                    'value': 0.5
+                }
+            },
+            number={'font': {'color': '#ccd6f6', 'size': 20}, 'valueformat': '.3f'}
+        ))
+        fig.update_layout(
+            height=135,
+            margin=dict(t=25, b=5, l=10, r=10),
+            paper_bgcolor='rgba(0,0,0,0)',
+            font_color='#ccd6f6'
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with h_col2:
+        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#8892b0;text-transform:uppercase;margin-bottom:4px;'>Risk Assessment</div>", unsafe_allow_html=True)
+        if data.get('cache_hit'):
+            st.success("🟢 LOW RISK\n\nVerified Cached Result")
+            st.caption("Assessment reused from cached origin.")
+        elif risk == 'low':
+            st.success("🟢 LOW RISK\n\nConsistent & Confident")
+            st.caption("No fabrication or speculation detected.")
+        elif risk == 'medium':
+            st.warning("🟡 MEDIUM RISK\n\nPotential Inconsistency")
+            st.caption("Minor divergence or hedging language.")
+        else:
+            st.error("🔴 HIGH RISK\n\nHigh Inconsistency")
+            st.caption("High variance across verification runs.")
+
+    with h_col3:
+        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#8892b0;text-transform:uppercase;margin-bottom:4px;'>Evaluation Findings</div>", unsafe_allow_html=True)
+        exp = data.get('explanation') or "Evaluation complete."
+        st.info(exp)
+        if data.get('tier') or data.get('query_type'):
+            st.caption(f"**Routing:** Tier: `{data.get('tier', 'N/A')}` | Type: `{data.get('query_type', 'N/A')}` | Complexity: `{data.get('complexity', 0):.2f}`")
+
+
 # ── Session state init ──────────────────────────────────────────────────────────
 if 'history' not in st.session_state:
     st.session_state.history = load_history()
@@ -246,95 +393,8 @@ with tab_query:
                     st.session_state.history.append(data)
                     save_history(st.session_state.history)
 
-                    # ── Cache Status Bar (Hit or Miss) ─────────────────────────
-                    if data.get('cache_hit'):
-                        sim = data.get('similarity')
-                        mq  = data.get('matched_query')
-                        src = data.get('cache_source', 'in_memory')
-                        lat = data.get('lookup_latency_ms', 0)
-                        
-                        sim_str = f" &nbsp;|&nbsp; Similarity: <strong>{sim:.3f}</strong>" if sim is not None else ""
-                        mq_str  = f'<br/><span style="font-size:0.8rem;opacity:0.85;">Matched Query: <em>"{mq}"</em></span>' if mq else ""
-                        
-                        st.markdown(f"""
-                        <div class="cache-status-bar cache-status-hit">
-                            <div>⚡ <strong>CACHE HIT</strong> — Retrieved from {src} ({lat:.1f}ms){sim_str}</div>
-                            {mq_str}
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        selected_model = data.get('model', 'N/A')
-                        actual_latency = data.get('latency_ms', 0)
-                        tier = data.get('tier')
-                        tier_info = f" ({tier.upper()} tier)" if tier else ""
-                        st.markdown(f"""
-                        <div class="cache-status-bar cache-status-miss">
-                            <div>🌐 <strong>CACHE MISS</strong> — Fresh model call routed to <strong>{selected_model}</strong>{tier_info} &nbsp;|&nbsp; Latency: <strong>{actual_latency:.0f} ms</strong></div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                    # ── Response (Main focus) ───────────────────────────────────
-                    st.markdown("### 📝 Response")
-                    st.write(data['response'])
-
-                    # ── Compact Metrics Row ────────────────────────────────────
-                    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-                    
-                    with col_m1:
-                        lat_val = f"{data.get('latency_ms', 0):.0f} ms"
-                        lat_sub = f"Lookup: {data.get('lookup_latency_ms', 0):.1f}ms" if data.get('cache_hit') else "API roundtrip"
-                        st.markdown(f"""
-                        <div class="metric-card">
-                            <div class="metric-label">Latency</div>
-                            <div class="metric-value">{lat_val}</div>
-                            <div class="metric-sub">{lat_sub}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                    with col_m2:
-                        c_val = "CACHE HIT" if data.get('cache_hit') else "CACHE MISS"
-                        c_sub = f"Sim: {data.get('similarity', 0):.2f}" if data.get('cache_hit') and data.get('similarity') is not None else "Fresh API call"
-                        st.markdown(f"""
-                        <div class="metric-card">
-                            <div class="metric-label">Cache Status</div>
-                            <div class="metric-value" style="color: {'#34d399' if data.get('cache_hit') else '#38bdf8'};">{c_val}</div>
-                            <div class="metric-sub">{c_sub}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                    with col_m3:
-                        raw_model = data.get('model', 'unknown')
-                        short_model = raw_model.split('/')[-1] if '/' in raw_model else raw_model
-                        strat = data.get('strategy', 'auto').replace('_', ' ').title()
-                        st.markdown(f"""
-                        <div class="metric-card">
-                            <div class="metric-label">Model</div>
-                            <div class="metric-value" style="font-size: 0.95rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="{raw_model}">{short_model}</div>
-                            <div class="metric-sub">{strat}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                    with col_m4:
-                        cost = data.get('cost_usd', 0)
-                        tokens = data.get('tokens', 0)
-                        st.markdown(f"""
-                        <div class="metric-card">
-                            <div class="metric-label">Est. Cost</div>
-                            <div class="metric-value">${cost:.5f}</div>
-                            <div class="metric-sub">{tokens:,} tokens</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                    # Optional compact verification expander (preserves verification details without crowding)
-                    h_score = data.get('hallucination_score')
-                    if h_score is not None:
-                        risk = data.get('risk_level', 'low').upper()
-                        risk_icon = {'LOW': '🟢', 'MEDIUM': '🟡', 'HIGH': '🔴'}.get(risk, '⚪')
-                        exp_text = data.get('explanation', '')
-                        with st.expander(f"🧠 Hallucination & Verification Details ({risk_icon} {risk} Risk — Score: {h_score:.2f})"):
-                            st.caption(f"**Analysis:** {exp_text}")
-                            if data.get('tier') or data.get('query_type'):
-                                st.caption(f"**Routing Info:** Tier: `{data.get('tier', 'N/A')}` | Query Type: `{data.get('query_type', 'N/A')}` | Complexity: `{data.get('complexity', 0):.2f}`")
+                    # ── Render Query -> Answer -> Metrics -> Per-Query Hallucination Analysis ──
+                    render_query_result(data, show_query_header=False)
 
                 else:
                     try:
@@ -384,18 +444,10 @@ with tab_query:
         selected_rows = event.selection.rows
         if selected_rows:
             rev_idx = selected_rows[0]
-            h = list(reversed(st.session_state.history[-20:]))[rev_idx]
+            selected_item = list(reversed(st.session_state.history[-20:]))[rev_idx]
             st.markdown("---")
-            st.markdown(f"**{h['query']}**")
-            st.caption(
-                f"Strategy: `{h['strategy']}` &nbsp;|&nbsp; "
-                f"Model: `{h['model']}` &nbsp;|&nbsp; "
-                f"Latency: `{h['latency_ms']:.0f}ms` &nbsp;|&nbsp; "
-                f"Cache: `{'✅ Hit' if h.get('cache_hit') else '❌ Miss'}` &nbsp;|&nbsp; "
-                f"Hallucination: `{h.get('hallucination_score',0):.3f}` &nbsp;|&nbsp; "
-                f"Risk: `{h.get('risk_level','low').upper()}`"
-            )
-            st.write(h['response'])
+            # Render selected historical query with its own exact answer, metrics, and hallucination analysis
+            render_query_result(selected_item, show_query_header=True)
 
 
 # ════════════════════════════════════════════════════════════════════════════════
