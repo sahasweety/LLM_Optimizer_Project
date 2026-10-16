@@ -6,3 +6,6 @@ __pycache__/
 *.png
 query_history.json
 test_model.py
+cache_store.json
+test_e2e.py
+check_imports.py
