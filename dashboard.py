@@ -218,6 +218,7 @@ def render_query_result(data: dict, show_query_header: bool = False):
     
     raw_risk = data.get('risk_level')
     risk = (raw_risk if isinstance(raw_risk, str) else 'low').lower()
+    score = float(data.get('hallucination_score', 0.0) or 0.0)
     
     with h_col1:
         # Compact gauge
