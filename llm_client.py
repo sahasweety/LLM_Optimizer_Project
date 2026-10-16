@@ -9,18 +9,18 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Configure Google only if key is present
-_google_configured = False
-def _ensure_google():
-    global _google_configured
-    if not _google_configured:
+# Lazy Google genai client
+_google_client = None
+
+def _get_google_client():
+    global _google_client
+    if _google_client is None:
         api_key = os.getenv('GOOGLE_API_KEY')
-        if api_key:
-            import google.generativeai as genai
-            genai.configure(api_key=api_key)
-            _google_configured = True
-        else:
+        if not api_key:
             raise ValueError("GOOGLE_API_KEY not set in .env")
+        from google import genai
+        _google_client = genai.Client(api_key=api_key)
+    return _google_client
 
 
 class LLMClient:
@@ -32,7 +32,7 @@ class LLMClient:
         )
 
     def call(self, system: str, prompt: str, model_info: dict) -> dict:
-        start = time.time()
+        start    = time.time()
         provider = model_info.get('provider', 'groq')
         model    = model_info.get('name', 'openai/gpt-oss-20b')
 
@@ -51,11 +51,18 @@ class LLMClient:
                 tokens = res.usage.total_tokens
 
             elif provider == 'google':
-                import google.generativeai as genai
-                _ensure_google()
-                gemini = genai.GenerativeModel(model)
+                from google import genai as gai
+                from google.genai import types as gtypes
+                client = _get_google_client()
                 full_prompt = f"{system}\n\n{prompt}"
-                res    = gemini.generate_content(full_prompt, request_options={"timeout": 20.0})
+                res = client.models.generate_content(
+                    model=model,
+                    contents=full_prompt,
+                    config=gtypes.GenerateContentConfig(
+                        max_output_tokens=512,
+                        temperature=0.7,
+                    )
+                )
                 text   = res.text
                 tokens = len(full_prompt.split()) + len(text.split())
 
@@ -76,9 +83,9 @@ class LLMClient:
                 raise ValueError(f"Unknown provider: {provider}")
 
         except Exception as e:
-            logger.warning(f"Provider '{provider}' failed: {e}. Falling back to Groq.")
+            logger.warning(f"Provider '{provider}' / model '{model}' failed: {e}. Falling back to Groq.")
             res = self.groq.chat.completions.create(
-                model="openai/gpt-oss-120b",
+                model="openai/gpt-oss-20b",
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user",   "content": prompt}

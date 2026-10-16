@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional
 import os
 import logging
 from dotenv import load_dotenv
@@ -19,7 +21,15 @@ from hallucination.detector import HallucinationDetector
 from observability.collector import FeedbackCollector
 from decision.engine import DecisionEngine
 
-app = FastAPI(title='LLM Optimization Platform', version='1.0')
+app = FastAPI(title='LLM Optimization Platform', version='2.0')
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 controller = OptimizationController()
 llm_client = LLMClient()
@@ -45,22 +55,31 @@ class QueryRequest(BaseModel):
     query: str
 
 class QueryResponse(BaseModel):
-    response:           str
-    strategy:           str
-    model:              str
-    latency_ms:         float
-    tokens:             int
-    cost_usd:           float
+    response:            str
+    strategy:            str
+    model:               str
+    latency_ms:          float
+    tokens:              int
+    cost_usd:            float
     hallucination_score: float
-    risk_level:         str
-    cache_hit:          bool
-    explanation:        str = ""
+    risk_level:          str
+    cache_hit:           bool
+    explanation:         str = ""
+    # Cache hit enrichment fields
+    similarity:          Optional[float] = None
+    matched_query:       Optional[str]  = None
+    cache_source:        Optional[str]  = None
+    lookup_latency_ms:   Optional[float] = None
+    # Routing metadata
+    query_type:          Optional[str]  = None
+    tier:                Optional[str]  = None
+    complexity:          Optional[float] = None
 
 
 @app.on_event("startup")
 async def on_startup():
-    logger.info("✅ LLM Optimization Platform API started on http://127.0.0.1:8081")
-    logger.info("📖 Docs available at http://127.0.0.1:8081/docs")
+    logger.info("✅ LLM Optimization Platform API v2 started")
+    logger.info("📖 Docs available at /docs")
 
 
 def safe_log_cache_hit(engine, opt):
@@ -78,7 +97,6 @@ def safe_log_cache_hit(engine, opt):
 
 
 def safe_log_query_metrics(engine, collector, query, llm_result, opt, halluc):
-    # Emit event to Kafka (non-blocking; fails gracefully)
     try:
         collector.emit_llm_call(
             query=query,
@@ -93,7 +111,6 @@ def safe_log_query_metrics(engine, collector, query, llm_result, opt, halluc):
     except Exception as e:
         logger.warning(f"Kafka emit failed (non-fatal): {e}")
 
-    # Log query metrics to DecisionEngine
     try:
         engine.log_query(
             strategy=opt['strategy'],
@@ -131,7 +148,14 @@ async def process_query(req: QueryRequest, background_tasks: BackgroundTasks):
                 hallucination_score=0.0,
                 risk_level='low',
                 cache_hit=True,
-                explanation="Low Risk: Response served instantly from Semantic Cache."
+                explanation="Low Risk: Response served instantly from Semantic Cache.",
+                similarity=opt.get('similarity'),
+                matched_query=opt.get('matched_query'),
+                cache_source=opt.get('cache_source', 'in_memory'),
+                lookup_latency_ms=opt.get('lookup_latency_ms'),
+                query_type=None,
+                tier='cache',
+                complexity=None
             )
 
         # ── LLM call path ─────────────────────────────────────────────────────
@@ -142,9 +166,14 @@ async def process_query(req: QueryRequest, background_tasks: BackgroundTasks):
             req.query, llm_result['response'], opt['model'])
 
         # Store in cache for future hits in background
-        background_tasks.add_task(controller.cache.set, req.query, llm_result['response'], query_embedding)
+        background_tasks.add_task(
+            controller.cache.set,
+            req.query,
+            llm_result['response'],
+            query_embedding,
+            {'model': opt['model']['name'], 'tier': opt['model'].get('tier'), 'strategy': opt['strategy']}
+        )
 
-        # Log query metrics and emit to Kafka in background
         background_tasks.add_task(
             safe_log_query_metrics,
             engine,
@@ -165,7 +194,14 @@ async def process_query(req: QueryRequest, background_tasks: BackgroundTasks):
             hallucination_score=halluc['hallucination_score'],
             risk_level=halluc['risk_level'],
             cache_hit=False,
-            explanation=halluc['explanation']
+            explanation=halluc['explanation'],
+            similarity=None,
+            matched_query=None,
+            cache_source=None,
+            lookup_latency_ms=None,
+            query_type=opt['model'].get('query_type'),
+            tier=opt['model'].get('tier'),
+            complexity=opt['model'].get('complexity')
         )
 
     except HTTPException:
@@ -185,6 +221,63 @@ async def get_metrics():
         return {"weights": {}, "recommended": "unknown", "error": str(e)}
 
 
+@app.get('/cache/stats')
+async def cache_stats():
+    """Return statistics and entries from the semantic cache."""
+    try:
+        with controller.cache._lock:
+            entries = list(controller.cache._in_memory_cache)
+
+        total = len(entries)
+        # Build summary entries (drop embedding to keep payload small)
+        summary = []
+        for e in entries:
+            summary.append({
+                'query': e.get('query', ''),
+                'normalized_query': e.get('normalized_query', ''),
+                'response_preview': e.get('response', '')[:120] + ('...' if len(e.get('response', '')) > 120 else ''),
+                'model_metadata': e.get('model_metadata', {}),
+                'timestamp': e.get('timestamp', 0),
+            })
+
+        return {
+            'total_entries': total,
+            'threshold': controller.cache.threshold,
+            'redis_online': not controller.cache._redis_offline,
+            'entries': summary
+        }
+    except Exception as e:
+        logger.error(f"/cache/stats error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete('/cache/clear')
+async def cache_clear():
+    """Clear all entries from the in-memory semantic cache and persistence file."""
+    try:
+        with controller.cache._lock:
+            cleared = len(controller.cache._in_memory_cache)
+            controller.cache._in_memory_cache = []
+            controller.cache._save_local_store()
+
+        # Also clear Redis if available
+        r = controller.cache._get_redis()
+        redis_cleared = 0
+        if r is not None:
+            try:
+                keys = list(r.scan_iter(f'{controller.cache.cache_prefix}*'))
+                if keys:
+                    redis_cleared = r.delete(*keys)
+            except Exception as re:
+                logger.warning(f"Redis clear failed: {re}")
+
+        logger.info(f"Cache cleared: {cleared} in-memory entries, {redis_cleared} Redis keys.")
+        return {'cleared_in_memory': cleared, 'cleared_redis': redis_cleared, 'status': 'ok'}
+    except Exception as e:
+        logger.error(f"/cache/clear error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get('/health')
 async def health():
-    return {'status': 'ok'}
+    return {'status': 'ok', 'version': '2.0'}

@@ -1,5 +1,6 @@
 import numpy as np
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import os
 import logging
 import concurrent.futures
@@ -15,24 +16,31 @@ _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 # Timeout (seconds) for the entire consistency check
 CONSISTENCY_TIMEOUT = 10
 
+
 class RemoteEmbedder:
     def __init__(self):
-        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-        
+        api_key = os.getenv("GOOGLE_API_KEY")
+        self._client = genai.Client(api_key=api_key)
+
     def encode(self, texts):
         if isinstance(texts, str):
             texts = [texts]
-        result = genai.embed_content(
+        result = self._client.models.embed_content(
             model="models/gemini-embedding-2",
-            content=texts,
-            task_type="retrieval_document"
+            contents=texts,
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
         )
-        return result['embedding']
+        # result.embeddings is a list of ContentEmbedding objects
+        embeddings = [e.values for e in result.embeddings]
+        if len(embeddings) == 1:
+            return embeddings[0]
+        return embeddings
+
 
 def get_embedder():
     global _shared_embedder
     if _shared_embedder is None:
-        logger.info("Initializing Google Gemini Embedder...")
+        logger.info("Initializing Google Gemini Embedder (google-genai SDK)...")
         _shared_embedder = RemoteEmbedder()
     return _shared_embedder
 
@@ -92,7 +100,7 @@ class HallucinationDetector:
         """
         f1 = _executor.submit(self._do_single_call, query, model_info)
         f2 = _executor.submit(self._do_single_call, query, model_info)
-        
+
         responses = []
         try:
             r1 = f1.result(timeout=CONSISTENCY_TIMEOUT)
@@ -100,7 +108,7 @@ class HallucinationDetector:
         except Exception as e:
             logger.warning(f"Consistency check call 1 failed or timed out: {e}")
             f1.cancel()
-            
+
         try:
             r2 = f2.result(timeout=CONSISTENCY_TIMEOUT)
             responses.append(r2)
@@ -119,9 +127,9 @@ class HallucinationDetector:
         return min(inconsistency * 1.5, 1.0)
 
     REFUSAL_PHRASES = [
-        "cannot answer", "don't have access", "do not have access", 
-        "cannot verify", "unable to provide", "as an ai", "sorry, but", 
-        "cannot provide", "i do not know", "i don't know", "real-time data", 
+        "cannot answer", "don't have access", "do not have access",
+        "cannot verify", "unable to provide", "as an ai", "sorry, but",
+        "cannot provide", "i do not know", "i don't know", "real-time data",
         "my knowledge cutoff", "is not available", "cannot confirm"
     ]
 
@@ -131,7 +139,7 @@ class HallucinationDetector:
 
     def score(self, query: str, response: str, model_info: dict) -> dict:
         reasons = []
-        
+
         # 1. Refusal Check
         if self._detect_refusal(response):
             return {
@@ -141,20 +149,16 @@ class HallucinationDetector:
                 'confidence_check': 0.0,
                 'consistency_check': 0.0
             }
-            
+
         # 2. Confidence / Hedging / Speculative Check
         conf_score = self._confidence_score(query, response)
-        
+
         # 3. Determine if consistency verification is needed
-        # We only run expensive verification if:
-        # - Confidence score is high (uncertainty/speculation detected)
-        # - OR it's a high-complexity query (complexity >= 0.5)
-        # - OR model is 'expert' or 'powerful' tier
         complexity = model_info.get('complexity', 0.0)
         tier = model_info.get('tier', 'fast')
-        
+
         needs_verification = (conf_score >= 0.25) or (complexity >= 0.5) or (tier in ('expert', 'powerful'))
-        
+
         if needs_verification:
             consist_score = self._consistency_score(query, model_info)
             if consist_score > 0.4:
@@ -169,11 +173,11 @@ class HallucinationDetector:
             reasons.append("Contains highly speculative phrasing or uncertainty markers.")
         elif conf_score > 0.15:
             reasons.append("Contains mild hedging language (e.g., 'probably', 'likely').")
-            
+
         # Compute final score
         final = (conf_score * 0.45) + (consist_score * 0.55)
         final = min(final, 1.0)
-        
+
         # Risk level determination
         if final > 0.5:
             risk = 'high'
@@ -184,13 +188,13 @@ class HallucinationDetector:
         else:
             risk = 'low'
             base_desc = "Low Risk: Response is semantically consistent and contains no speculative or uncertain language."
-            
+
         # Build explanation
         if reasons:
             explanation = f"{base_desc} Details: " + " ".join(reasons)
         else:
             explanation = base_desc
-            
+
         return {
             'hallucination_score': round(final, 3),
             'risk_level': risk,

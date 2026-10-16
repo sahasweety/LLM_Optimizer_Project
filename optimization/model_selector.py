@@ -17,7 +17,7 @@ class ModelSelector:
             'tier': 'balanced'
         },
         'powerful': {
-            'name': 'anthropic/claude-3-haiku',
+            'name': 'anthropic/claude-haiku-4.5',
             'provider': 'openrouter',
             'cost_per_1k': 0.00025,
             'max_tokens': 4096,

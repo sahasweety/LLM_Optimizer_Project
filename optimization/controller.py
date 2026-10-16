@@ -16,11 +16,14 @@ class OptimizationController:
         cached = self.cache.get(query, query_embedding=query_embedding)
         if cached:
             return {
-                'response': cached['response'],
-                'strategy': 'cache',
-                'latency_ms': (time.time() - start) * 1000,
-                'cache_hit': True,
-                'similarity': cached['similarity']
+                'response':          cached['response'],
+                'strategy':          'cache',
+                'latency_ms':        (time.time() - start) * 1000,
+                'cache_hit':         True,
+                'similarity':        cached.get('similarity'),
+                'matched_query':     cached.get('matched_query'),
+                'cache_source':      cached.get('cache_source', 'in_memory'),
+                'lookup_latency_ms': cached.get('lookup_latency_ms'),
             }
 
         # Step 2: Select model based on complexity and intent
