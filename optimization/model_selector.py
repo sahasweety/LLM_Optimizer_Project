@@ -3,9 +3,9 @@ from .prompt_module import PromptModule
 class ModelSelector:
     MODELS = {
         'fast': {
-            'name': 'openai/gpt-oss-20b',
-            'provider': 'groq',
-            'cost_per_1k': 0.0001,
+            'name': 'meta-llama/llama-3.1-8b-instruct',
+            'provider': 'openrouter',
+            'cost_per_1k': 0.00005,
             'max_tokens': 4096,
             'tier': 'fast'
         },
@@ -65,8 +65,9 @@ class ModelSelector:
             # Needs structured text translation/summaries: balanced/powerful
             tier = 'powerful' if score >= 0.4 else 'balanced'
         elif q_type in ('creative', 'current_events'):
-            # Dynamic creative writing or temporal updates: balanced/fast
-            tier = 'balanced' if score >= 0.3 else 'fast'
+            # Creative/current-events always prefers Gemini (balanced);
+            # only fall to fast for trivially simple one-word queries
+            tier = 'fast' if score < 0.1 else 'balanced'
         else: # general_chat, factual QA
             # Fast response / simple chat: fast/balanced
             tier = 'balanced' if score >= 0.4 else 'fast'

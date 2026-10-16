@@ -139,13 +139,25 @@ def render_query_result(data: dict, show_query_header: bool = False):
         </div>
         """, unsafe_allow_html=True)
     else:
-        selected_model = data.get('model', 'N/A')
+        selected_model = data.get('actual_model') or data.get('model', 'N/A')
+        intended_model = data.get('intended_model') or selected_model
+        actual_provider = (data.get('actual_provider') or '').upper()
+        intended_provider = (data.get('intended_provider') or actual_provider).upper()
         actual_latency = data.get('latency_ms', 0)
         tier = data.get('tier')
         tier_info = f" ({tier.upper()} tier)" if tier else ""
+        
+        fallback_flag = data.get('fallback_occurred', False)
+        fallback_note = ""
+        if fallback_flag:
+            fallback_reason = data.get('fallback_reason', 'Provider error')
+            fallback_note = f"""<br/><span style="color:#fbbf24;font-size:0.8rem;">⚠️ Fallback triggered: Intended {intended_model} ({intended_provider}) failed → handled by {selected_model} ({actual_provider}). Reason: {fallback_reason}</span>"""
+            
+        provider_disp = f"[{actual_provider}] " if actual_provider else ""
         st.markdown(f"""
         <div class="cache-status-bar cache-status-miss">
-            <div>🌐 <strong>CACHE MISS</strong> — Fresh model call routed to <strong>{selected_model}</strong>{tier_info} &nbsp;|&nbsp; Latency: <strong>{actual_latency:.0f} ms</strong></div>
+            <div>🌐 <strong>CACHE MISS</strong> — Routed to <strong>{provider_disp}{selected_model}</strong>{tier_info} &nbsp;|&nbsp; Latency: <strong>{actual_latency:.0f} ms</strong></div>
+            {fallback_note}
         </div>
         """, unsafe_allow_html=True)
 
@@ -258,7 +270,11 @@ def render_query_result(data: dict, show_query_header: bool = False):
         exp = data.get('explanation') or "Evaluation complete."
         st.info(exp)
         if data.get('tier') or data.get('query_type'):
-            st.caption(f"**Routing:** Tier: `{data.get('tier', 'N/A')}` | Type: `{data.get('query_type', 'N/A')}` | Complexity: `{data.get('complexity', 0):.2f}`")
+            intended_p = data.get('intended_provider', '').upper()
+            actual_p = data.get('actual_provider', '').upper()
+            prov_text = f" | Provider: `{actual_p}`" if actual_p else ""
+            fb_text = " (Fallback)" if data.get('fallback_occurred') else ""
+            st.caption(f"**Routing:** Tier: `{data.get('tier', 'N/A')}` | Type: `{data.get('query_type', 'N/A')}` | Complexity: `{data.get('complexity', 0):.2f}`{prov_text}{fb_text}")
 
 
 # ── Session state init ──────────────────────────────────────────────────────────
@@ -489,7 +505,9 @@ with tab_routing:
                 'Tier':         h.get('tier', 'cache' if h.get('cache_hit') else 'N/A'),
                 'Query Type':   h.get('query_type', '—') or '—',
                 'Complexity':   f"{h.get('complexity', 0) or 0:.2f}" if not h.get('cache_hit') else '—',
-                'Model':        h['model'],
+                'Model':        h.get('actual_model') or h['model'],
+                'Provider':     (h.get('actual_provider') or '—').upper() if not h.get('cache_hit') else 'CACHE',
+                'Fallback':     '⚠️ Yes' if h.get('fallback_occurred') else 'No',
                 'Strategy':     h['strategy'],
                 'Latency (ms)': round(h['latency_ms'], 1),
                 'Cost ($)':     round(h.get('cost_usd', 0), 6),

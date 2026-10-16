@@ -70,10 +70,16 @@ class QueryResponse(BaseModel):
     matched_query:       Optional[str]  = None
     cache_source:        Optional[str]  = None
     lookup_latency_ms:   Optional[float] = None
-    # Routing metadata
+    # Routing metadata & Diagnostics
     query_type:          Optional[str]  = None
     tier:                Optional[str]  = None
     complexity:          Optional[float] = None
+    intended_model:      Optional[str]  = None
+    intended_provider:   Optional[str]  = None
+    actual_model:        Optional[str]  = None
+    actual_provider:     Optional[str]  = None
+    fallback_occurred:   bool           = False
+    fallback_reason:     Optional[str]  = None
 
 
 @app.on_event("startup")
@@ -187,7 +193,7 @@ async def process_query(req: QueryRequest, background_tasks: BackgroundTasks):
         return QueryResponse(
             response=llm_result['response'],
             strategy=opt['strategy'],
-            model=opt['model']['name'],
+            model=llm_result.get('actual_model') or opt['model']['name'],
             latency_ms=llm_result['latency_ms'],
             tokens=llm_result['tokens'],
             cost_usd=llm_result['cost_usd'],
@@ -201,7 +207,13 @@ async def process_query(req: QueryRequest, background_tasks: BackgroundTasks):
             lookup_latency_ms=None,
             query_type=opt['model'].get('query_type'),
             tier=opt['model'].get('tier'),
-            complexity=opt['model'].get('complexity')
+            complexity=opt['model'].get('complexity'),
+            intended_model=llm_result.get('intended_model') or opt['model']['name'],
+            intended_provider=llm_result.get('intended_provider') or opt['model'].get('provider'),
+            actual_model=llm_result.get('actual_model') or opt['model']['name'],
+            actual_provider=llm_result.get('actual_provider') or opt['model'].get('provider'),
+            fallback_occurred=llm_result.get('fallback_occurred', False),
+            fallback_reason=llm_result.get('fallback_reason')
         )
 
     except HTTPException:

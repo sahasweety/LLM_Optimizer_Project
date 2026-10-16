@@ -36,6 +36,11 @@ class LLMClient:
         provider = model_info.get('provider', 'groq')
         model    = model_info.get('name', 'openai/gpt-oss-20b')
 
+        actual_provider = provider
+        actual_model    = model
+        fallback_occurred = False
+        fallback_reason = None
+
         try:
             if provider == 'groq':
                 res = self.groq.chat.completions.create(
@@ -83,25 +88,53 @@ class LLMClient:
                 raise ValueError(f"Unknown provider: {provider}")
 
         except Exception as e:
-            logger.warning(f"Provider '{provider}' / model '{model}' failed: {e}. Falling back to Groq.")
-            res = self.groq.chat.completions.create(
-                model="openai/gpt-oss-20b",
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user",   "content": prompt}
-                ],
-                max_tokens=512,
-                timeout=20.0
-            )
-            text   = res.choices[0].message.content
-            tokens = res.usage.total_tokens
+            fallback_reason = f"Provider '{provider}' ({model}) failed: {str(e)}"
+            logger.warning(f"{fallback_reason}. Explicitly falling back to OpenRouter meta-llama/llama-3.1-8b-instruct.")
+            fallback_occurred = True
+            try:
+                # Try fallback via OpenRouter Llama first
+                res = self.openrouter.chat.completions.create(
+                    model="meta-llama/llama-3.1-8b-instruct",
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user",   "content": prompt}
+                    ],
+                    max_tokens=512,
+                    timeout=20.0
+                )
+                text = res.choices[0].message.content
+                tokens = res.usage.total_tokens if res.usage else 100
+                actual_provider = 'openrouter'
+                actual_model = 'meta-llama/llama-3.1-8b-instruct'
+            except Exception as e2:
+                # Fallback to Groq if OpenRouter also failed
+                logger.warning(f"Secondary fallback failed: {e2}. Falling back to Groq openai/gpt-oss-20b.")
+                res = self.groq.chat.completions.create(
+                    model="openai/gpt-oss-20b",
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user",   "content": prompt}
+                    ],
+                    max_tokens=512,
+                    timeout=20.0
+                )
+                text = res.choices[0].message.content
+                tokens = res.usage.total_tokens
+                actual_provider = 'groq'
+                actual_model = 'openai/gpt-oss-20b'
 
         latency = (time.time() - start) * 1000
         cost    = (tokens / 1000) * model_info.get('cost_per_1k', 0.0002)
 
         return {
-            'response':   text,
-            'tokens':     tokens,
-            'latency_ms': latency,
-            'cost_usd':   cost
+            'response':          text,
+            'tokens':            tokens,
+            'latency_ms':        latency,
+            'cost_usd':          cost,
+            'intended_model':    model,
+            'intended_provider': provider,
+            'actual_model':      actual_model,
+            'actual_provider':   actual_provider,
+            'fallback_occurred': fallback_occurred,
+            'fallback_reason':   fallback_reason
         }
