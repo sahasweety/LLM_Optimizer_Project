@@ -136,9 +136,15 @@ async def process_query(req: QueryRequest, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
 
     try:
-        # Precompute query embedding once per request
-        query_embedding = controller.cache._embed(req.query)
-        opt = controller.process(req.query, engine, query_embedding=query_embedding)
+        # Compute TWO embeddings per request to correctly use Gemini's asymmetric retrieval:
+        #   - RETRIEVAL_QUERY  → used to look up similar stored entries (cache.get)
+        #   - RETRIEVAL_DOCUMENT → used to store this response for future lookups (cache.set)
+        # Using RETRIEVAL_DOCUMENT for both (the previous bug) suppressed cosine similarity
+        # scores even for identical queries, causing perpetual cache misses.
+        query_embed_for_lookup  = controller.cache._embed(req.query, task_type="RETRIEVAL_QUERY")
+        query_embed_for_storage = controller.cache._embed(req.query, task_type="RETRIEVAL_DOCUMENT")
+
+        opt = controller.process(req.query, engine, query_embedding=query_embed_for_lookup)
 
         # ── Cache hit path ────────────────────────────────────────────────────
         if opt.get('cache_hit'):
@@ -171,12 +177,13 @@ async def process_query(req: QueryRequest, background_tasks: BackgroundTasks):
         halluc = detector.score(
             req.query, llm_result['response'], opt['model'])
 
-        # Store in cache for future hits in background
+        # Store response using the RETRIEVAL_DOCUMENT embedding so future
+        # RETRIEVAL_QUERY lookups compute high similarity against it.
         background_tasks.add_task(
             controller.cache.set,
             req.query,
             llm_result['response'],
-            query_embedding,
+            query_embed_for_storage,
             {'model': opt['model']['name'], 'tier': opt['model'].get('tier'), 'strategy': opt['strategy']}
         )
 

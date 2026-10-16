@@ -22,13 +22,25 @@ class RemoteEmbedder:
         api_key = os.getenv("GOOGLE_API_KEY")
         self._client = genai.Client(api_key=api_key)
 
-    def encode(self, texts):
+    def encode(self, texts, task_type: str = "RETRIEVAL_DOCUMENT"):
+        """
+        Embed texts using Gemini Embedding 2.
+
+        Args:
+            texts: str or list of str
+            task_type: Gemini task type.
+                - "RETRIEVAL_DOCUMENT" for content being stored/indexed.
+                - "RETRIEVAL_QUERY"    for incoming search queries.
+        Using the correct task_type for each role is critical: mismatching
+        both to RETRIEVAL_DOCUMENT suppresses cosine similarity even for
+        semantically identical queries, causing false cache misses.
+        """
         if isinstance(texts, str):
             texts = [texts]
         result = self._client.models.embed_content(
             model="models/gemini-embedding-2",
             contents=texts,
-            config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
+            config=types.EmbedContentConfig(task_type=task_type)
         )
         # result.embeddings is a list of ContentEmbedding objects
         embeddings = [e.values for e in result.embeddings]

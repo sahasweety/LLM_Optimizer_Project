@@ -128,9 +128,17 @@ class CacheModule:
             return None
         return self._redis
 
-    def _embed(self, text: str) -> np.ndarray:
-        """Embed text using Gemini embedder and guarantee 1D numpy array."""
-        raw = self.model.encode(normalize_query(text))
+    def _embed(self, text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> np.ndarray:
+        """
+        Embed text using Gemini embedder and guarantee 1D numpy array.
+
+        task_type must be:
+          - "RETRIEVAL_QUERY"    when embedding an incoming search query (get).
+          - "RETRIEVAL_DOCUMENT" when embedding content to be stored (set).
+        Mismatching these roles suppresses cosine similarity even for identical
+        strings and is the root cause of false cache misses with Gemini embeddings.
+        """
+        raw = self.model.encode(normalize_query(text), task_type=task_type)
         arr = np.array(raw, dtype=np.float32)
         if arr.ndim > 1:
             arr = arr.reshape(-1)
@@ -148,19 +156,26 @@ class CacheModule:
     def get(self, query: str, query_embedding=None) -> dict | None:
         """
         Lookup semantic cache.
+
+        query_embedding: pre-computed RETRIEVAL_QUERY embedding (numpy array or list).
+            If None, one is computed here. Do NOT pass a RETRIEVAL_DOCUMENT embedding;
+            the asymmetric task_types are what give Gemini Embedding 2 its retrieval power.
+
         Returns a dict with hit metadata if found, or None if missed or uncacheable.
         """
         start_time = time.time()
-        
+
         # Check cacheability
         if not is_query_cacheable(query):
             logger.info(f"Query '{query}' is time-sensitive or personal – bypassing cache.")
             return None
 
+        # Always embed the lookup query with RETRIEVAL_QUERY task_type.
+        # If a pre-computed RETRIEVAL_QUERY embedding is supplied, use it directly.
         if query_embedding is not None:
             query_vec = np.array(query_embedding, dtype=np.float32).reshape(-1)
         else:
-            query_vec = self._embed(query)
+            query_vec = self._embed(query, task_type="RETRIEVAL_QUERY")
 
         r = self._get_redis()
         
@@ -233,17 +248,21 @@ class CacheModule:
 
         return None
 
-    def set(self, query: str, response: str, query_embedding=None, model_metadata: dict = None):
+    def set(self, query: str, response: str, doc_embedding=None, model_metadata: dict = None):
         """
         Store query-response in cache with rich metadata.
+
+        doc_embedding: pre-computed RETRIEVAL_DOCUMENT embedding (numpy array or list).
+            If None, one is computed here. This MUST be a RETRIEVAL_DOCUMENT embedding,
+            not a RETRIEVAL_QUERY embedding, so that similarity scores are correct.
         """
         if not is_query_cacheable(query):
             return
 
-        if query_embedding is not None:
-            embedding = query_embedding.tolist() if hasattr(query_embedding, 'tolist') else query_embedding
+        if doc_embedding is not None:
+            embedding = doc_embedding.tolist() if hasattr(doc_embedding, 'tolist') else list(doc_embedding)
         else:
-            embedding = self._embed(query).tolist()
+            embedding = self._embed(query, task_type="RETRIEVAL_DOCUMENT").tolist()
 
         entry = {
             'query': query,
